@@ -45,11 +45,6 @@ class Bot:
         text = ''
         mess = update.effective_message.text
 
-        if mess == '/cancel':
-            self.cancel_handler(update, _)
-            self.current_state = 100
-            return self.current_state
-
         if is_correct_number(mess):
             text = 'Введите код из СМС'
             self.current_state = 2
@@ -62,12 +57,6 @@ class Bot:
     def code_handler(self, update: Update, _: CallbackContext):
         text = ''
         mess = update.effective_message.text
-
-        if mess == '/cancel':
-            self.cancel_handler(update, _)
-            self.current_state = 100
-            return self.current_state
-
         if is_correct_code(mess):
             text = 'Верный код'
             self.current_state = 3
@@ -88,8 +77,8 @@ class Bot:
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start_handler)],
             states={
-                1: [MessageHandler(Filters.text, self.phone_handler)],
-                2: [MessageHandler(Filters.text, self.code_handler)]
+                1: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
+                2: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler)],
         )
