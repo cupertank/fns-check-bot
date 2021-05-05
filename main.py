@@ -2,7 +2,7 @@ import os
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from telegram import Update
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("LOCAL_TOKEN")
 
 
 def echo_handler(update: Update, _: CallbackContext):
