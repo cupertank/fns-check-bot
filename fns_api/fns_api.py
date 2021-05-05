@@ -1,5 +1,7 @@
 import requests
 
+from .exceptions import *
+
 __HOST = 'irkkt-mobile.nalog.ru:8888'
 __DEVICE_OS = 'iOS'
 __CLIENT_VERSION = '2.9.0'
@@ -26,7 +28,9 @@ def send_login_sms(number: str):
         'client_secret': __CLIENT_SECRET,
         'phone': number
     }
-    requests.post(url, headers=__HEADERS, json=payload)
+    resp = requests.post(url, headers=__HEADERS, json=payload)
+    if resp.status_code != 200:
+        raise InvalidPhoneException()
 
 
 def send_login_code(number: str, code: str):
@@ -37,6 +41,8 @@ def send_login_code(number: str, code: str):
         'code': code
     }
     resp = requests.post(url, headers=__HEADERS, json=payload)
+    if resp.status_code != 200:
+        raise InvalidSmsCodeException()
     resp_json = resp.json()
     return resp_json["sessionId"], resp_json["refresh_token"]
 
@@ -47,6 +53,8 @@ def __get_ticket_id(qr: str, session_id: str) -> str:
     headers["sessionId"] = session_id
     payload = {'qr': qr}
     resp = requests.post(url, headers=headers, json=payload)
+    if resp.status_code != 200:
+        raise InvalidTicketIdException()
     resp_json = resp.json()
     return resp_json["id"]
 
@@ -68,5 +76,7 @@ def refresh_session(refresh_token: str) -> str:
         "refresh_token": refresh_token
     }
     resp = requests.post(url, headers=headers, json=payload)
+    if resp.status_code != 200:
+        raise InvalidSessionIdException()
     resp_json = resp.json()
     return resp_json["sessionId"]
