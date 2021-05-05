@@ -2,6 +2,8 @@ import os
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from telegram import Update
 
+import fns_api
+
 TOKEN = os.getenv("TOKEN")
 
 
