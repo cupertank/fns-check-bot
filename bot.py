@@ -48,11 +48,17 @@ class Bot:
                 if not c.isdigit():
                     return False
             context.user_data["id"] = fns_api.send_login_code(number, code)[0]
+            context.user_data["refresh"] = fns_api.send_login_code(number, code)[1]
             return True
         except InvalidSmsCodeException:
             return False
 
-    def start_handler(self, update: Update, _: CallbackContext):
+    def start_handler(self, update: Update, context: CallbackContext):
+        if "refresh" in context.user_data:
+            context.user_data["id"] = fns_api.fns_api.refresh_session(context.user_data["refresh"])
+            update.effective_message.reply_text("Привет! Введите имена пользователей(для каждого пользователя введите имя на новой строчке):")
+            return States.WAITING_NAMES
+
         update.effective_message.reply_text("Привет! Введите ваш номер телефона: ")
         return States.WAITING_PHONE
 
