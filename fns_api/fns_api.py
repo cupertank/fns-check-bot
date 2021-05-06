@@ -1,6 +1,7 @@
 import requests
 
 from .exceptions import *
+from .receipt import Receipt
 
 __HOST = 'irkkt-mobile.nalog.ru:8888'
 __DEVICE_OS = 'iOS'
@@ -59,13 +60,28 @@ def __get_ticket_id(qr: str, session_id: str) -> str:
     return resp_json["id"]
 
 
-def get_ticket(qr: str, session_id: str) -> dict:
+def __get_ticket(qr: str, session_id: str) -> dict:
     headers = __HEADERS.copy()
     headers["sessionId"] = session_id
     ticket_id = __get_ticket_id(qr, session_id)
     url = f'https://{__HOST}/v2/tickets/{ticket_id}'
     resp = requests.get(url, headers=headers)
-    return resp.json()
+    if resp.status_code != 200:
+        raise InvalidTicketIdException()
+    ticket_dict = resp.json()
+    if "status" not in ticket_dict or ticket_dict["status"] != 2:
+        raise InvalidTicketIdException()
+    return ticket_dict
+
+
+def get_receipt(qr: str, session_id: str) -> Receipt:
+    ticket_dict = __get_ticket(qr, session_id)
+    try:
+        receipt_dict = ticket_dict["ticket"]["document"]["receipt"]
+        ticket: Receipt = Receipt.from_dict(receipt_dict)
+        return ticket
+    except KeyError:  # TODO check if nothing else can be thrown
+        raise InvalidTicketIdException
 
 
 def refresh_session(refresh_token: str) -> str:
