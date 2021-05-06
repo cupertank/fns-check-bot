@@ -1,10 +1,22 @@
-import bot
 import os
+from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
+from telegram import Update
+
+import fns_api
+
+TOKEN = os.getenv("TOKEN")
+
+
+def echo_handler(update: Update, _: CallbackContext):
+    text = update.effective_message.text
+    update.effective_message.reply_text(text)
+
 
 def main():
-    TOKEN = os.getenv("TOKEN")
-    fns_bot = bot.Bot(TOKEN)
-    fns_bot.run()
+    updater = Updater(TOKEN)
+    updater.dispatcher.add_handler(MessageHandler(Filters.text, echo_handler))
+    updater.start_polling()
+    updater.idle()
 
 
 if __name__ == "__main__":
