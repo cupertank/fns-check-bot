@@ -1,6 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from telegram import Update
 import fns_api
+from fns_api.exceptions import InvalidSmsCodeException
 
 
 def is_correct_number(tel_num):
@@ -23,8 +24,16 @@ def is_correct_number(tel_num):
     return True
 
 
-def is_correct_code(code):
-    return True
+def is_correct_code(code, number, context):
+    try:
+        if len(code) != 4:
+            return False
+        for c in code:
+            if not c.isdigit():
+                return False
+        context.user_data["id"] = fns_api.send_login_code(number, code)[0]
+    except InvalidSmsCodeException:
+        return False
 
 
 class Bot:
@@ -34,6 +43,7 @@ class Bot:
     def __init__(self, token):
         self.current_state = 0
         self.updater = Updater(token)
+        self.number = ""
 
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start_handler)],
@@ -51,27 +61,29 @@ class Bot:
         update.effective_message.reply_text("Привет! Введите ваш номер телефона: ")
         return self.current_state
 
-    def phone_handler(self, update: Update, _: CallbackContext):
+    def phone_handler(self, update: Update, context: CallbackContext):
         text = ''
         mess = update.effective_message.text
 
         if is_correct_number(mess):
+            context.user_data["phone_number"] = mess
             text = 'Введите код из СМС'
+            fns_api.send_login_sms(context.user_data["phone_number"])
             self.current_state = 2
         else:
             text = "Неверный номер телефона, если хотите прекратить работу, введите /cancel"
         update.effective_message.reply_text(text)
-
         return self.current_state
 
-    def code_handler(self, update: Update, _: CallbackContext):
+    def code_handler(self, update: Update, context: CallbackContext):
         text = ''
         mess = update.effective_message.text
-        if is_correct_code(mess):
+        if is_correct_code(mess, context.user_data["phone_number"], context):
             text = 'Верный код'
             self.current_state = 3
         else:
             text = "Неверный код, если хотите прекратить работу, введите /cancel"
+        text += "\nVash id: " + context.user_data["id"]
         update.effective_message.reply_text(text)
 
         return self.current_state
