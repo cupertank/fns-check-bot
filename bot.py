@@ -1,4 +1,3 @@
-import os
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from telegram import Update
 import fns_api
@@ -32,9 +31,20 @@ class Bot:
     current_state = 0
     TOKEN = 0
 
-    def __init__(self):
-        self.TOKEN = os.getenv("LOCAL_TOKEN")
+    def __init__(self, token):
         self.current_state = 0
+        self.updater = Updater(token)
+
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', self.start_handler)],
+            states={
+                1: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
+                2: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)]
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel_handler)],
+        )
+
+        self.updater.dispatcher.add_handler(conv_handler)
 
     def start_handler(self, update: Update, _: CallbackContext):
         self.current_state = 1
@@ -72,17 +82,5 @@ class Bot:
         return ConversationHandler.END
 
     def run(self):
-        updater = Updater(self.TOKEN)
-
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', self.start_handler)],
-            states={
-                1: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
-                2: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)]
-            },
-            fallbacks=[CommandHandler('cancel', self.cancel_handler)],
-        )
-
-        updater.dispatcher.add_handler(conv_handler)
-        updater.start_polling()
-        updater.idle()
+        self.updater.start_polling()
+        self.updater.idle()

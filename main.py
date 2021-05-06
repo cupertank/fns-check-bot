@@ -1,8 +1,9 @@
 import bot
-
+import os
 
 def main():
-    fns_bot = bot.Bot()
+    TOKEN = os.getenv("TOKEN")
+    fns_bot = bot.Bot(TOKEN)
     fns_bot.run()
 
 
