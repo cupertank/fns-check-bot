@@ -1,7 +1,9 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from telegram import Update
 import fns_api
+import readerQR
 from fns_api.exceptions import *
+from fns_api.fns_api import get_receipt
 from states import States
 
 
@@ -14,7 +16,8 @@ class Bot:
             states={
                 States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
                 States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)],
-                States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)]
+                States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)],
+                States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler)],
         )
@@ -95,6 +98,15 @@ class Bot:
         context.user_data["names"] = mess.splitlines()
         update.effective_message.reply_text('Пришлите фотографию QR-кода с чека:')
         return States.WAITING_TICKET
+
+    def picture_handler(self, update: Update, context: CallbackContext):
+        sess_id = context.user_data['id']
+        photo_file = update.message.photo[-1].get_file().download_as_bytearray()
+        if readerQR.readQR(photo_file)[1]:
+             print(get_receipt(readerQR.readQR(photo_file)[0], sess_id))
+        else:
+            update.effective_message.reply_text("QR не читаем или его нет")
+            return States.WAITING_TICKET
 
     def run(self):
         self.updater.start_polling()
