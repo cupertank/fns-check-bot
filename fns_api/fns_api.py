@@ -30,8 +30,8 @@ def send_login_sms(number: str):
         'phone': number
     }
     resp = requests.post(url, headers=__HEADERS, json=payload)
-    if resp.status_code != 200:
-        raise InvalidPhoneException()
+    if resp.status_code != 204:
+        raise InvalidPhoneException(resp)
 
 
 def send_login_code(number: str, code: str):
@@ -43,7 +43,7 @@ def send_login_code(number: str, code: str):
     }
     resp = requests.post(url, headers=__HEADERS, json=payload)
     if resp.status_code != 200:
-        raise InvalidSmsCodeException()
+        raise InvalidSmsCodeException(resp)
     resp_json = resp.json()
     return resp_json["sessionId"], resp_json["refresh_token"]
 
@@ -55,7 +55,7 @@ def __get_ticket_id(qr: str, session_id: str) -> str:
     payload = {'qr': qr}
     resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code != 200:
-        raise InvalidTicketIdException()
+        raise InvalidTicketIdException(resp)
     resp_json = resp.json()
     return resp_json["id"]
 
@@ -67,10 +67,10 @@ def __get_ticket(qr: str, session_id: str) -> dict:
     url = f'https://{__HOST}/v2/tickets/{ticket_id}'
     resp = requests.get(url, headers=headers)
     if resp.status_code != 200:
-        raise InvalidTicketIdException()
+        raise InvalidTicketIdException(resp)
     ticket_dict = resp.json()
     if "status" not in ticket_dict or ticket_dict["status"] != 2:
-        raise InvalidTicketIdException()
+        raise InvalidTicketIdException(ticket_dict)
     return ticket_dict
 
 
@@ -81,7 +81,7 @@ def get_receipt(qr: str, session_id: str) -> Receipt:
         ticket: Receipt = Receipt.from_dict(receipt_dict)
         return ticket
     except KeyError:  # TODO check if nothing else can be thrown
-        raise InvalidTicketIdException
+        raise InvalidTicketIdException(ticket_dict)
 
 
 def refresh_session(refresh_token: str) -> str:
@@ -93,6 +93,6 @@ def refresh_session(refresh_token: str) -> str:
     }
     resp = requests.post(url, headers=headers, json=payload)
     if resp.status_code != 200:
-        raise InvalidSessionIdException()
+        raise InvalidSessionIdException(resp)
     resp_json = resp.json()
     return resp_json["sessionId"]
