@@ -32,6 +32,7 @@ def is_correct_code(code, number, context):
             if not c.isdigit():
                 return False
         context.user_data["id"] = fns_api.send_login_code(number, code)[0]
+        return True
     except InvalidSmsCodeException:
         return False
 
@@ -86,7 +87,7 @@ class Bot:
         text += "\nVash id: " + context.user_data["id"]
         update.effective_message.reply_text(text)
 
-        return self.current_state
+        return ConversationHandler.END
 
     def cancel_handler(self, update: Update, _: CallbackContext):
         text = 'До новых встреч'
