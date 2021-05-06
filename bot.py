@@ -1,5 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from telegram import Update
+import psycopg2
+import db
 import fns_api
 import readerQR
 from fns_api.exceptions import *
@@ -8,8 +10,16 @@ from states import States
 
 
 class Bot:
-    def __init__(self, token):
+    def __init__(self, token, database_url):
         self.updater = Updater(token)
+
+        if database_url is None:
+            # local without postgres
+            self.dao = db.Dao(None)
+        else:
+            # heroku deploy
+            conn = psycopg2.connect(database_url)
+            self.dao = db.Dao(conn)
 
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start_handler)],
