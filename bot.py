@@ -1,6 +1,8 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from telegram import Update
 import fns_api
+from fns_api.exceptions import *
+from states import States
 
 
 class Bot:
@@ -10,9 +12,9 @@ class Bot:
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start_handler)],
             states={
-                1: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
-                2: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)],
-                3: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)]
+                States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
+                States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)],
+                States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler)],
         )
@@ -38,33 +40,45 @@ class Bot:
 
         return True
 
-    def __is_correct_code(self, code):
-        return True
+    def __is_correct_code(self, code, number, context):
+        try:
+            if len(code) != 4:
+                return False
+            for c in code:
+                if not c.isdigit():
+                    return False
+            context.user_data["id"] = fns_api.send_login_code(number, code)[0]
+            return True
+        except InvalidSmsCodeException:
+            return False
 
     def start_handler(self, update: Update, _: CallbackContext):
         update.effective_message.reply_text("Привет! Введите ваш номер телефона: ")
-        return 1
+        return States.WAITING_PHONE
 
-    def phone_handler(self, update: Update, _: CallbackContext):
+    def phone_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
 
         if self.__is_correct_number(mess):
             update.effective_message.reply_text('Введите код из СМС')
-            return 2
+            if mess[0] == '7' or mess[0] == '8':
+                mess = '+7' + mess[1:]
+            context.user_data['phone'] = mess
+            fns_api.send_login_sms(context.user_data['phone'])
+            return States.WAITING_CODE
 
         update.effective_message.reply_text("Неверный номер телефона, если хотите прекратить работу, введите /cancel")
+        return States.WAITING_PHONE
 
-        return 1
-
-    def code_handler(self, update: Update, _: CallbackContext):
+    def code_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
 
-        if self.__is_correct_code(mess):
+        if self.__is_correct_code(mess, context.user_data['phone'], context):
             update.effective_message.reply_text('Верный код. Введите имена пользователей(для каждого пользователя введите имя на новой строчке):')
-            return 3
+            return States.WAITING_NAMES
 
         update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
-        return 2
+        return States.WAITING_CODE
 
     def cancel_handler(self, update: Update, _: CallbackContext):
         update.effective_message.reply_text('До новых встреч')
@@ -74,7 +88,7 @@ class Bot:
         mess = update.effective_message.text
         context.user_data["names"] = mess.splitlines()
         update.effective_message.reply_text('Пришлите фотографию QR-кода с чека:')
-        return 4
+        return States.WAITING_TICKET
 
     def run(self):
         self.updater.start_polling()
