@@ -2,7 +2,7 @@ import bot
 import os
 
 def main():
-    TOKEN = os.getenv("TOKEN")
+    TOKEN = os.getenv("LOCAL_TOKEN")
     fns_bot = bot.Bot(TOKEN)
     fns_bot.run()
 

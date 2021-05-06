@@ -3,36 +3,8 @@ from telegram import Update
 import fns_api
 
 
-def is_correct_number(tel_num):
-    if tel_num[0] == '+':
-        if len(tel_num) != 12:
-            return False
-        tel_num = tel_num[1:]
-    else:
-        if len(tel_num) != 11:
-            return False
-    if tel_num[0] != '7' and tel_num[0] != '8':
-        return False
-    if tel_num[1] != '9':
-        return False
-
-    for c in tel_num:
-        if not c.isdigit():
-            return False
-
-    return True
-
-
-def is_correct_code(code):
-    return True
-
-
 class Bot:
-    current_state = 0
-    TOKEN = 0
-
     def __init__(self, token):
-        self.current_state = 0
         self.updater = Updater(token)
 
         conv_handler = ConversationHandler(
@@ -46,39 +18,55 @@ class Bot:
 
         self.updater.dispatcher.add_handler(conv_handler)
 
+    def __is_correct_number(self, tel_num):
+        if tel_num[0] == '+':
+            if len(tel_num) != 12:
+                return False
+            tel_num = tel_num[1:]
+        else:
+            if len(tel_num) != 11:
+                return False
+        if tel_num[0] != '7' and tel_num[0] != '8':
+            return False
+        if tel_num[1] != '9':
+            return False
+
+        for c in tel_num:
+            if not c.isdigit():
+                return False
+
+        return True
+
+    def __is_correct_code(self, code):
+        return True
+
     def start_handler(self, update: Update, _: CallbackContext):
-        self.current_state = 1
         update.effective_message.reply_text("Привет! Введите ваш номер телефона: ")
-        return self.current_state
+        return 1
 
     def phone_handler(self, update: Update, _: CallbackContext):
-        text = ''
         mess = update.effective_message.text
 
-        if is_correct_number(mess):
-            text = 'Введите код из СМС'
-            self.current_state = 2
-        else:
-            text = "Неверный номер телефона, если хотите прекратить работу, введите /cancel"
-        update.effective_message.reply_text(text)
+        if self.__is_correct_number(mess):
+            update.effective_message.reply_text('Введите код из СМС')
+            return 2
 
-        return self.current_state
+        update.effective_message.reply_text("Неверный номер телефона, если хотите прекратить работу, введите /cancel")
+
+        return 1
 
     def code_handler(self, update: Update, _: CallbackContext):
-        text = ''
         mess = update.effective_message.text
-        if is_correct_code(mess):
-            text = 'Верный код'
-            self.current_state = 3
-        else:
-            text = "Неверный код, если хотите прекратить работу, введите /cancel"
-        update.effective_message.reply_text(text)
 
-        return self.current_state
+        if self.__is_correct_code(mess):
+            update.effective_message.reply_text('Верный код')
+            return 3
+
+        update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
+        return 2
 
     def cancel_handler(self, update: Update, _: CallbackContext):
-        text = 'До новых встреч'
-        update.effective_message.reply_text(text)
+        update.effective_message.reply_text('До новых встреч')
         return ConversationHandler.END
 
     def run(self):
