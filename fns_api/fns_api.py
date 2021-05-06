@@ -30,7 +30,7 @@ def send_login_sms(number: str):
         'phone': number
     }
     resp = requests.post(url, headers=__HEADERS, json=payload)
-    if resp.status_code != 200:
+    if resp.status_code != 204:
         raise InvalidPhoneException()
 
 
