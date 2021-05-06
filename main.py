@@ -1,11 +1,10 @@
 import bot
 import os
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
 def main():
     TOKEN = os.getenv("MAIN_TOKEN")
-    fns_bot = bot.Bot(TOKEN)
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    fns_bot = bot.Bot(TOKEN, DATABASE_URL)
     fns_bot.run()
 
 

@@ -9,9 +9,9 @@ class Dao:
     """
 
     def __init__(self, db):
-        self.localDict = {}
-        self.isLocal = db is None
-        if self.isLocal:
+        self.__localDict = {}
+        self.__isLocal = db is None  # for non-heroku builds
+        if self.__isLocal:
             return
 
         self.db = db
@@ -19,8 +19,8 @@ class Dao:
         self.users = Table("users")
 
     def set_refresh_token(self, uid: int, refresh_token: str) -> None:
-        if self.isLocal:
-            self.localDict[uid] = refresh_token
+        if self.__isLocal:
+            self.__localDict[uid] = refresh_token
             return
 
         sql = PostgreSQLQuery.into(self.users).insert(uid, refresh_token)\
@@ -29,9 +29,9 @@ class Dao:
         self.db.commit()
 
     def get_refresh_token(self, uid: int) -> str:
-        if self.isLocal:
-            if uid in self.localDict:
-                return self.localDict[uid]
+        if self.__isLocal:
+            if uid in self.__localDict:
+                return self.__localDict[uid]
             else:
                 raise FNSUserDoesNotExistException(f'{uid} is not present in the database')
 
