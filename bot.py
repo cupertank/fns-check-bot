@@ -14,6 +14,7 @@ class Bot:
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start_handler)],
             states={
+                States.WAITING_NEW_CHECK: [CommandHandler('new_check', self.new_check_handler)],
                 States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
                 States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)],
                 States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)],
@@ -59,17 +60,28 @@ class Bot:
     def start_handler(self, update: Update, context: CallbackContext):
         if "refresh" in context.user_data:
             context.user_data["id"] = fns_api.fns_api.refresh_session(context.user_data["refresh"])
-            update.effective_message.reply_text("Привет! Введите имена пользователей(для каждого пользователя введите имя на новой строчке):")
+            update.effective_message.reply_text\
+                ("Привет! Введите имена пользователей(для каждого пользователя введите имя на новой строчке):")
             return States.WAITING_NAMES
 
-        update.effective_message.reply_text("Привет! Введите ваш номер телефона: ")
+        update.effective_message.reply_text("Привет! Введите комманду /new_check: ")
+        return States.WAITING_NEW_CHECK
+
+    def new_check_handler(self, update: Update, context: CallbackContext):
+        if "refresh" in context.user_data:
+            context.user_data["id"] = fns_api.fns_api.refresh_session(context.user_data["refresh"])
+            update.effective_message.reply_text\
+                ("Введите имена пользователей(для каждого пользователя введите имя на новой строчке):")
+            return States.WAITING_NAMES
+
+        update.effective_message.reply_text("Введите ваш номер телефона: ")
         return States.WAITING_PHONE
 
     def phone_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
 
         if self.__is_correct_number(mess):
-            update.effective_message.reply_text('Введите код из СМС')
+            update.effective_message.reply_text('Введите код из СМС:')
             if mess[0] == '7' or mess[0] == '8':
                 mess = '+7' + mess[1:]
             context.user_data['phone'] = mess
@@ -83,15 +95,16 @@ class Bot:
         mess = update.effective_message.text
 
         if self.__is_correct_code(mess, context.user_data['phone'], context):
-            update.effective_message.reply_text('Верный код. Введите имена пользователей(для каждого пользователя введите имя на новой строчке):')
+            update.effective_message.reply_text\
+                ('Введите имена пользователей(для каждого пользователя введите имя на новой строчке):')
             return States.WAITING_NAMES
 
         update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
         return States.WAITING_CODE
 
     def cancel_handler(self, update: Update, _: CallbackContext):
-        update.effective_message.reply_text('До новых встреч')
-        return ConversationHandler.END
+        update.effective_message.reply_text('Для разделения нового чека введите комманду /new_check')
+        return States.WAITING_NEW_CHECK
 
     def guest_name_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
@@ -103,9 +116,12 @@ class Bot:
         sess_id = context.user_data['id']
         photo_file = update.message.photo[-1].get_file().download_as_bytearray()
         if readerQR.readQR(photo_file)[1]:
-             print(get_receipt(readerQR.readQR(photo_file)[0], sess_id))
+            check = get_receipt(readerQR.readQR(photo_file)[0], sess_id)
+            for item in check.items:
+                update.effective_message.reply_text(str(item.name) + ' - ' + str(item.quantity) + ' - ' + str(item.price))
+            return States.WAITING_NEW_CHECK
         else:
-            update.effective_message.reply_text("QR не читаем или его нет")
+            update.effective_message.reply_text("QR-код не читаем или его нет")
             return States.WAITING_TICKET
 
     def run(self):
