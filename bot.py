@@ -1,5 +1,6 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
-from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, \
+    CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 import psycopg2
 import db
 import fns_api
@@ -31,11 +32,18 @@ class Bot:
         ticket_handler = ConversationHandler(
             entry_points=[CommandHandler('new_check', self.new_check_handler)],
             states={
-                States.WAITING_NEW_CHECK: [CommandHandler('new_check', self.new_check_handler)],
                 States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)],
-                States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler)]
+                States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler)],
+                States.TICKET_PICKS: [
+                    CallbackQueryHandler(self.tickets_picks_next_handler, pattern="^NEXT$"),
+                    CallbackQueryHandler(self.tickets_picks_prev_handler, pattern="^PREV$"),
+                    CallbackQueryHandler(self.tickets_picks_finish_handler, pattern="^FINISH$"),
+                    CallbackQueryHandler(self.ticket_picks_yes_handler, pattern=".*_YES$"),
+                    CallbackQueryHandler(self.ticket_picks_no_handler, pattern=".*_NO$")
+                ]
             },
-            fallbacks=[CommandHandler('cancel', self.cancel_handler)],
+            fallbacks=[CommandHandler('cancel', self.cancel_handler),
+                       CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL")],
         )
 
         self.updater.dispatcher.add_handler(login_handler)
@@ -114,7 +122,53 @@ class Bot:
 
     def cancel_handler(self, update: Update, _: CallbackContext):
         update.effective_message.reply_text('Для разделения нового чека введите комманду /new_check')
-        return States.WAITING_NEW_CHECK
+        return ConversationHandler.END
+
+    def inline_cancel_handler(self, update: Update, _: CallbackContext):
+        update.effective_message.edit_text('Операция отменена.\n'
+                                           'Для разделения нового чека введите комманду /new_check')
+        return ConversationHandler.END
+
+    def ticket_picks_yes_handler(self, update: Update, context: CallbackContext):
+        callback_name = update.callback_query.data[:-4]
+        current_pos = context.user_data["current_pos"]
+        context.user_data["users_for_position"][current_pos].append(callback_name)
+        new_keyboard = self.__make_keyboard_by_position(context.user_data["names"],
+                                                        context.user_data["users_for_position"][current_pos],
+                                                        first=current_pos == 0,
+                                                        last=current_pos == len(context.user_data["check"]) - 1)
+        update.effective_message.edit_reply_markup(reply_markup=new_keyboard)
+
+    def ticket_picks_no_handler(self, update: Update, context: CallbackContext):
+        callback_name = update.callback_query.data[:-3]
+        current_pos = context.user_data["current_pos"]
+        context.user_data["users_for_position"][current_pos].remove(callback_name)
+        new_keyboard = self.__make_keyboard_by_position(context.user_data["names"],
+                                                        context.user_data["users_for_position"][current_pos],
+                                                        first=current_pos == 0,
+                                                        last=current_pos == len(context.user_data["check"]) - 1)
+        update.effective_message.edit_reply_markup(reply_markup=new_keyboard)
+
+    def tickets_picks_prev_handler(self, update: Update, context: CallbackContext):
+        context.user_data["current_pos"] -= 1
+        current_pos = context.user_data["current_pos"]
+        keyboard = self.__make_keyboard_by_position(context.user_data["names"],
+                                                    context.user_data["users_for_position"][current_pos],
+                                                    first=current_pos == 0)
+        position_name = context.user_data["check"][current_pos].name
+        update.effective_message.edit_text(position_name, reply_markup=keyboard)
+
+    def tickets_picks_next_handler(self, update: Update, context: CallbackContext):
+        context.user_data["current_pos"] += 1
+        current_pos = context.user_data["current_pos"]
+        keyboard = self.__make_keyboard_by_position(context.user_data["names"],
+                                                    context.user_data["users_for_position"][current_pos],
+                                                    last=current_pos == len(context.user_data["check"]) - 1)
+        position_name = context.user_data["check"][current_pos].name
+        update.effective_message.edit_text(position_name, reply_markup=keyboard)
+
+    def tickets_picks_finish_handler(self, update: Update, context: CallbackContext):
+        update.effective_message.edit_text("Ура, где-то здесь будут циферки")
 
     def guest_name_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
@@ -128,10 +182,15 @@ class Bot:
         if readerQR.readQR(photo_file)[1]:
             try:
                 check = get_receipt(readerQR.readQR(photo_file)[0], sess_id)
-                for item in check.items:
-                    update.effective_message.reply_text(
-                        str(item.name) + ' - ' + str(item.quantity) + ' - ' + str(item.price))
-                return ConversationHandler.END
+                context.user_data["check"] = check.items
+                context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
+                context.user_data["current_pos"] = 0
+                keyboard = self.__make_keyboard_by_position(context.user_data["names"],
+                                                            context.user_data["users_for_position"][0],
+                                                            first=True)
+                update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price}руб.",
+                                                    reply_markup=keyboard)
+                return States.TICKET_PICKS
             except InvalidTicketIdException:
                 if "refresh" in context.user_data:
                     try:
@@ -142,6 +201,29 @@ class Bot:
         else:
             update.effective_message.reply_text("QR-код не читаем или его нет")
             return States.WAITING_TICKET
+
+    def __make_keyboard_by_position(self, names, users_for_position, first=False, last=False):
+        buttons = []
+        for name in names:
+            if name in users_for_position:
+                buttons.append([InlineKeyboardButton(f"✅ {name}", callback_data=f"{name}_NO")])
+            else:
+                buttons.append([InlineKeyboardButton(f"❌ {name}", callback_data=f"{name}_YES")])
+
+        prev = InlineKeyboardButton("Prev", callback_data="PREV")
+        next = InlineKeyboardButton("Next", callback_data="NEXT")
+        finish = InlineKeyboardButton("Finish", callback_data="FINISH")
+
+        if first:
+            buttons.append([next])
+        elif last:
+            buttons.append([prev, finish])
+        else:
+            buttons.append([prev, next])
+
+        buttons.append([InlineKeyboardButton("Отмена", callback_data="CANCEL")])
+
+        return InlineKeyboardMarkup(buttons)
 
     def run(self):
         self.updater.start_polling()
