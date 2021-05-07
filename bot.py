@@ -84,10 +84,20 @@ class Bot:
         update.effective_message.reply_text("Привет! Введите номер телефона: ")
         return States.WAITING_PHONE
 
-    def new_check_handler(self, update: Update, _: CallbackContext):
-        update.effective_message.reply_text\
-            ("Введите имена пользователей(для каждого пользователя введите имя на новой строчке): ")
-        return States.WAITING_NAMES
+    def new_check_handler(self, update: Update, context: CallbackContext):
+        if "refresh" in context.user_data.keys():
+            try:
+                context.user_data["id"] = fns_api.refresh_session(context.user_data["refresh"])
+            except InvalidSessionIdException:
+                update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
+                return ConversationHandler.END
+            update.effective_message.reply_text \
+                ("Введите имена пользователей(для каждого пользователя введите имя на новой строчке): ")
+            return States.WAITING_NAMES
+        else:
+            update.effective_message.reply_text('Вы не авторизованы. Введите команду /login')
+            return ConversationHandler.END
+
 
     def phone_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
@@ -156,7 +166,8 @@ class Bot:
                                                     context.user_data["users_for_position"][current_pos],
                                                     first=current_pos == 0)
         position_name = context.user_data["check"][current_pos].name
-        update.effective_message.edit_text(position_name, reply_markup=keyboard)
+        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
+                                           ' руб.', reply_markup=keyboard)
 
     def tickets_picks_next_handler(self, update: Update, context: CallbackContext):
         context.user_data["current_pos"] += 1
@@ -165,10 +176,19 @@ class Bot:
                                                     context.user_data["users_for_position"][current_pos],
                                                     last=current_pos == len(context.user_data["check"]) - 1)
         position_name = context.user_data["check"][current_pos].name
-        update.effective_message.edit_text(position_name, reply_markup=keyboard)
+        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
+                                           ' руб.', reply_markup=keyboard)
 
     def tickets_picks_finish_handler(self, update: Update, context: CallbackContext):
-        update.effective_message.edit_text("Ура, где-то здесь будут циферки")
+        answer = ''
+        for name in context.user_data['names']:
+            debt = 0
+            for j in range(len(context.user_data['check'])):
+                if name in context.user_data['users_for_position'][j]:
+                    debt += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
+            answer +=  name + ' должен заплатить ' + ("%.2f" % debt)  + ' руб.\n'
+
+        update.effective_message.edit_text(answer)
 
     def guest_name_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
@@ -179,20 +199,23 @@ class Bot:
     def picture_handler(self, update: Update, context: CallbackContext):
         sess_id = context.user_data['id']
         photo_file = update.message.photo[-1].get_file().download_as_bytearray()
-        if readerQR.readQR(photo_file)[1]:
+        url = update.message.photo[-1].get_file().file_path
+        uniq_id = update.message.photo[-1].get_file().file_unique_id
+        text, got = readerQR.twoQRreaders(url, uniq_id, photo_file)
+        if got:
             try:
-                check = get_receipt(readerQR.readQR(photo_file)[0], sess_id)
+                check = get_receipt(text, sess_id)
                 context.user_data["check"] = check.items
                 context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
                 context.user_data["current_pos"] = 0
                 keyboard = self.__make_keyboard_by_position(context.user_data["names"],
                                                             context.user_data["users_for_position"][0],
                                                             first=True)
-                update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price}руб.",
+                update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} руб.",
                                                     reply_markup=keyboard)
                 return States.TICKET_PICKS
             except InvalidTicketIdException:
-                if "refresh" in context.user_data:
+                if "refresh" in context.user_data.keys():
                     try:
                         context.user_data["id"] = fns_api.refresh_session(context.user_data["refresh"])
                     except InvalidSessionIdException:
