@@ -7,8 +7,9 @@ import readerQR
 from fns_api.exceptions import *
 from fns_api.fns_api import get_receipt
 from states import States
+import os
 
-
+TOKEN = os.getenv("LOCAL_TOKEN")
 class Bot:
     def __init__(self, token, database_url):
         self.updater = Updater(token)
@@ -112,8 +113,11 @@ class Bot:
     def picture_handler(self, update: Update, context: CallbackContext):
         sess_id = context.user_data['id']
         photo_file = update.message.photo[-1].get_file().download_as_bytearray()
-        if readerQR.readQR(photo_file)[1]:
-            check = get_receipt(readerQR.readQR(photo_file)[0], sess_id)
+        url = update.message.photo[-1].get_file().file_path
+        uniq_id = update.message.photo[-1].get_file().file_unique_id
+        text, got = readerQR.twoQRreaders(url, uniq_id, photo_file)
+        if got:
+            check = get_receipt(text, sess_id)
             for item in check.items:
                 update.effective_message.reply_text(str(item.name) + ' - ' + str(item.quantity) + ' - ' + str(item.price))
             return States.WAITING_NEW_CHECK
