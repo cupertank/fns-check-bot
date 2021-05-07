@@ -14,7 +14,6 @@ class Bot:
         self.updater = Updater(token)
 
         if database_url is None:
-            # local without postgres
             self.dao = db.Dao(None)
         else:
             # heroku deploy
@@ -67,23 +66,11 @@ class Bot:
         except InvalidSmsCodeException:
             return False
 
-    def start_handler(self, update: Update, context: CallbackContext):
-        if "refresh" in context.user_data:
-            context.user_data["id"] = fns_api.fns_api.refresh_session(context.user_data["refresh"])
-            update.effective_message.reply_text\
-                ("Привет! Введите имена пользователей(для каждого пользователя введите имя на новой строчке):")
-            return States.WAITING_NAMES
-
+    def start_handler(self, update: Update, _: CallbackContext):
         update.effective_message.reply_text("Привет! Введите комманду /new_check: ")
         return States.WAITING_NEW_CHECK
 
-    def new_check_handler(self, update: Update, context: CallbackContext):
-        if "refresh" in context.user_data:
-            context.user_data["id"] = fns_api.fns_api.refresh_session(context.user_data["refresh"])
-            update.effective_message.reply_text\
-                ("Введите имена пользователей(для каждого пользователя введите имя на новой строчке):")
-            return States.WAITING_NAMES
-
+    def new_check_handler(self, update: Update, _: CallbackContext):
         update.effective_message.reply_text("Введите ваш номер телефона: ")
         return States.WAITING_PHONE
 
