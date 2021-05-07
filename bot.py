@@ -16,23 +16,30 @@ class Bot:
         if database_url is None:
             self.dao = db.Dao(None)
         else:
-            # heroku deploy
             conn = psycopg2.connect(database_url)
             self.dao = db.Dao(conn)
 
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', self.start_handler)],
+        login_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', self.start_handler), CommandHandler('login', self.start_handler)],
+            states={
+                States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
+                States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)]
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel_handler)],
+        )
+
+        ticket_handler = ConversationHandler(
+            entry_points=[CommandHandler('new_check', self.new_check_handler)],
             states={
                 States.WAITING_NEW_CHECK: [CommandHandler('new_check', self.new_check_handler)],
-                States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
-                States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)],
                 States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)],
                 States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler)],
         )
 
-        self.updater.dispatcher.add_handler(conv_handler)
+        self.updater.dispatcher.add_handler(login_handler)
+        self.updater.dispatcher.add_handler(ticket_handler)
 
     def __is_correct_number(self, tel_num):
         if tel_num[0] == '+':
@@ -60,19 +67,19 @@ class Bot:
             for c in code:
                 if not c.isdigit():
                     return False
-            context.user_data["id"] = fns_api.send_login_code(number, code)[0]
-            context.user_data["refresh"] = fns_api.send_login_code(number, code)[1]
+            context.user_data["id"], context.user_data["refresh"] = fns_api.send_login_code(number, code)
             return True
         except InvalidSmsCodeException:
             return False
 
     def start_handler(self, update: Update, _: CallbackContext):
-        update.effective_message.reply_text("Привет! Введите комманду /new_check: ")
-        return States.WAITING_NEW_CHECK
+        update.effective_message.reply_text("Привет! Введите номер телефона: ")
+        return States.WAITING_PHONE
 
     def new_check_handler(self, update: Update, _: CallbackContext):
-        update.effective_message.reply_text("Введите ваш номер телефона: ")
-        return States.WAITING_PHONE
+        update.effective_message.reply_text\
+            ("Введите имена пользователей(для каждого пользователя введите имя на новой строчке): ")
+        return States.WAITING_NAMES
 
     def phone_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
@@ -91,10 +98,16 @@ class Bot:
     def code_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
 
-        if self.__is_correct_code(mess, context.user_data['phone'], context):
+        current_is_correct_code = self.__is_correct_code(mess, context.user_data['phone'], context)
+
+        if current_is_correct_code:
             update.effective_message.reply_text\
-                ('Введите имена пользователей(для каждого пользователя введите имя на новой строчке):')
-            return States.WAITING_NAMES
+                ('Введите команду /new_check для обработки чека:')
+            return ConversationHandler.END
+        elif current_is_correct_code is None:
+            update.effective_message.reply_text \
+                ('Какие-то проблемы с телефоном, введите его еще раз:')
+            return States.WAITING_PHONE
 
         update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
         return States.WAITING_CODE
@@ -113,10 +126,19 @@ class Bot:
         sess_id = context.user_data['id']
         photo_file = update.message.photo[-1].get_file().download_as_bytearray()
         if readerQR.readQR(photo_file)[1]:
-            check = get_receipt(readerQR.readQR(photo_file)[0], sess_id)
-            for item in check.items:
-                update.effective_message.reply_text(str(item.name) + ' - ' + str(item.quantity) + ' - ' + str(item.price))
-            return States.WAITING_NEW_CHECK
+            try:
+                check = get_receipt(readerQR.readQR(photo_file)[0], sess_id)
+                for item in check.items:
+                    update.effective_message.reply_text(
+                        str(item.name) + ' - ' + str(item.quantity) + ' - ' + str(item.price))
+                return ConversationHandler.END
+            except InvalidTicketIdException:
+                if "refresh" in context.user_data:
+                    try:
+                        context.user_data["id"] = fns_api.refresh_session(context.user_data["refresh"])
+                    except InvalidSessionIdException:
+                        update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
+                        return ConversationHandler.END
         else:
             update.effective_message.reply_text("QR-код не читаем или его нет")
             return States.WAITING_TICKET
