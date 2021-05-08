@@ -5,11 +5,23 @@ from PIL import Image
 from pyzxing import BarCodeReader
 import urllib.request
 from typing import Union
+import cv2
+from pyzbar.pyzbar import decode
 
 
 def read_image(path):
     with open(path, "rb") as f:
         return bytearray(f.read())
+
+
+def read_qr_by_pyzbar(uniq_id) -> (str, bool):
+    img = cv2.imread(uniq_id)
+    decoded = decode(img)
+    decoded = [code for code in decoded if code.type == 'QRCODE']
+    if len(decoded) != 1:
+        return '', False
+    text = decoded[0].data.decode("utf-8")
+    return text, True
 
 
 def read_qr_by_pyzxing(img: Union[bytearray, str]):
@@ -45,11 +57,20 @@ def delete_photo(uniq_id):
 
 def main_qr_reader(url, uniq_id, byteimg: bytearray):
     download_photo(url, uniq_id)
-    text1, got1 = read_qr_by_pyzxing(byteimg)
-    text2, got2 = read_qr_by_pyzxing(uniq_id + ".jpg")
-    delete_photo(uniq_id)
-    if got1:
-        return text1, True
-    if got2:
-        return text2, True
+
+    text, got = read_qr_by_pyzbar(uniq_id + ".jpg")
+    if got:
+        delete_photo(uniq_id)
+        return text, True
+
+    text, got = read_qr_by_pyzxing(byteimg)
+    if got:
+        delete_photo(uniq_id)
+        return text, True
+
+    text, got = read_qr_by_pyzxing(uniq_id + ".jpg")
+    if got:
+        delete_photo(uniq_id)
+        return text, True
+
     return '', False
