@@ -1,2 +1,0 @@
-class FNSUserDoesNotExistException(Exception):
-    pass
