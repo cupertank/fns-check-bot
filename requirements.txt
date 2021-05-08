@@ -16,3 +16,4 @@ pypika==0.48.1
 numpy==1.18.1
 pyzxing==1.0.1
 opencv-python==4.5.1.48
+Pillow==8.2.0
