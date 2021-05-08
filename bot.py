@@ -90,11 +90,6 @@ class Bot:
     @staticmethod
     def new_check_handler(update: Update, context: CallbackContext):
         if "refresh" in context.user_data.keys():
-            try:
-                context.user_data["id"] = fns_api.refresh_session(context.user_data["refresh"])
-            except InvalidSessionIdException:
-                update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
-                return ConversationHandler.END
             update.effective_message.reply_text(
                 text="Введите имена пользователей(для каждого пользователя введите имя на новой строчке): "
             )
@@ -232,6 +227,19 @@ class Bot:
                 if "refresh" in context.user_data.keys():
                     try:
                         context.user_data["id"] = fns_api.refresh_session(context.user_data["refresh"])
+                        try:
+                            check = get_receipt(text, context.user_data['id'])
+                            context.user_data["check"] = check.items
+                            context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
+                            context.user_data["current_pos"] = 0
+                            keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
+                                                                        context.user_data["users_for_position"][0],
+                                                                        first=True)
+                            update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} руб.",
+                                                                reply_markup=keyboard)
+                        except:
+                            update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
+                            return ConversationHandler.END
                     except InvalidSessionIdException:
                         update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
                         return ConversationHandler.END
