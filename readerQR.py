@@ -14,10 +14,10 @@ def read_image(path):
 
 def read_qr_by_pyzxing(img: Union[bytearray, str]):
     reader = BarCodeReader()
-    if img is bytearray:
+    if type(img) is bytearray:
         np_array = np.array(Image.open(io.BytesIO(img)))
         results = reader.decode_array(np_array)
-    elif img is str:
+    elif type(img) is str:
         results = reader.decode(img)
     else:
         return "", False
