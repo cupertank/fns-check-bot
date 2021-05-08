@@ -1,11 +1,14 @@
-import os
 import io
+import os
+import urllib.request
+from typing import Union
+
+import cv2
 import numpy as np
 from PIL import Image
 from pyzxing import BarCodeReader
-import urllib.request
-from typing import Union
-import cv2
+
+from complexQrReader import read_qr_complex_pyzxing
 from pyzbar.pyzbar import decode
 
 
@@ -69,6 +72,11 @@ def main_qr_reader(url, uniq_id, byteimg: bytearray):
         return text, True
 
     text, got = read_qr_by_pyzxing(uniq_id + ".jpg")
+    if got:
+        delete_photo(uniq_id)
+        return text, True
+
+    text, got = read_qr_complex_pyzxing(uniq_id + ".jpg")
     if got:
         delete_photo(uniq_id)
         return text, True
