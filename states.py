@@ -1,11 +1,11 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class States(Enum):
-    WAITING_NEW_CHECK = 0
-    WAITING_PHONE = 1
-    WAITING_CODE = 2
-    WAITING_NAMES = 3
-    WAITING_TICKET = 4
-    TICKET_PICKS = 5
+    WAITING_NEW_CHECK = auto()
+    WAITING_PHONE = auto()
+    WAITING_CODE = auto()
+    WAITING_NAMES = auto()
+    WAITING_TICKET = auto()
+    TICKET_PICKS = auto()
 
