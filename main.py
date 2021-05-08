@@ -1,22 +1,11 @@
+import bot
 import os
-from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
-from telegram import Update
-
-import fns_api
-
-TOKEN = os.getenv("TOKEN")
-
-
-def echo_handler(update: Update, _: CallbackContext):
-    text = update.effective_message.text
-    update.effective_message.reply_text(text)
-
 
 def main():
-    updater = Updater(TOKEN)
-    updater.dispatcher.add_handler(MessageHandler(Filters.text, echo_handler))
-    updater.start_polling()
-    updater.idle()
+    TOKEN = os.environ.get("TOKEN")
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    fns_bot = bot.Bot(TOKEN, DATABASE_URL)
+    fns_bot.run()
 
 
 if __name__ == "__main__":
