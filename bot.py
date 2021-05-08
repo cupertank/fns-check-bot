@@ -258,10 +258,10 @@ class Bot:
     def picture_handler(update: Update, context: CallbackContext):
         sess_id = context.user_data['id']
         file_info = update.message.photo[-1].get_file()
-        photo_file = file_info.download_as_bytearray()
         url = file_info.file_path
         uniq_id = file_info.file_unique_id
-        text, got = readerQR.main_qr_reader(url, uniq_id, photo_file)
+        wait_message = update.effective_message.reply_text("Пожалуйста, подождите...")
+        text, got = readerQR.main_qr_reader(url, uniq_id)
         if got:
             try:
                 check = get_receipt(text, sess_id)
@@ -271,8 +271,8 @@ class Bot:
                 keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                             context.user_data["users_for_position"][0],
                                                             first=True)
-                update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} руб.",
-                                                    reply_markup=keyboard)
+                wait_message.edit_text(f"{check.items[0].name} - {check.items[0].price} руб.",
+                                       reply_markup=keyboard)
                 return States.TICKET_PICKS
             except InvalidTicketIdException:
                 if "refresh" in context.user_data.keys():

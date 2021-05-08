@@ -11,14 +11,16 @@ from pyzxing import BarCodeReader
 from complexQrReader import read_qr_complex_pyzxing
 from pyzbar.pyzbar import decode
 
+from main import cache_dir
+
 
 def read_image(path):
     with open(path, "rb") as f:
         return bytearray(f.read())
 
 
-def read_qr_by_pyzbar(uniq_id) -> (str, bool):
-    img = cv2.imread(uniq_id)
+def read_qr_by_pyzbar(path) -> (str, bool):
+    img = cv2.imread(path)
     decoded = decode(img)
     decoded = [code for code in decoded if code.type == 'QRCODE']
     if len(decoded) != 1:
@@ -29,10 +31,10 @@ def read_qr_by_pyzbar(uniq_id) -> (str, bool):
 
 def read_qr_by_pyzxing(img: Union[bytearray, str]):
     reader = BarCodeReader()
-    if type(img) is bytearray:
+    if isinstance(img, bytearray):
         np_array = np.array(Image.open(io.BytesIO(img)))
         results = reader.decode_array(np_array)
-    elif type(img) is str:
+    elif isinstance(img, str):
         results = reader.decode(img)
     else:
         return "", False
@@ -47,36 +49,33 @@ def read_qr_by_pyzxing(img: Union[bytearray, str]):
     return text, True
 
 
-def download_photo(url, uniq_id):
+def download_photo(url, uniq_id) -> str:
     img = urllib.request.urlopen(url).read()
-    out = open(uniq_id + ".jpg", "wb")
-    out.write(img)
-    out.close()
+    path = f"{cache_dir}/{uniq_id}.jpg"
+    with open(path, "wb") as file:
+        file.write(img)
+
+    return path
 
 
 def delete_photo(uniq_id):
-    os.remove(uniq_id + ".jpg")
+    os.remove(f"{cache_dir}/{uniq_id}.jpg")
 
 
-def main_qr_reader(url, uniq_id, byteimg: bytearray):
-    download_photo(url, uniq_id)
+def main_qr_reader(url, uniq_id):
+    path = download_photo(url, uniq_id)
 
-    text, got = read_qr_by_pyzbar(uniq_id + ".jpg")
+    text, got = read_qr_by_pyzbar(path)
     if got:
         delete_photo(uniq_id)
         return text, True
 
-    text, got = read_qr_by_pyzxing(byteimg)
+    text, got = read_qr_by_pyzxing(path)
     if got:
         delete_photo(uniq_id)
         return text, True
 
-    text, got = read_qr_by_pyzxing(uniq_id + ".jpg")
-    if got:
-        delete_photo(uniq_id)
-        return text, True
-
-    text, got = read_qr_complex_pyzxing(uniq_id + ".jpg")
+    text, got = read_qr_complex_pyzxing(path)
     if got:
         delete_photo(uniq_id)
         return text, True
