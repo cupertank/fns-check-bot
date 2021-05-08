@@ -11,6 +11,7 @@ import readerQR
 from fns_api.exceptions import *
 from fns_api.fns_api import get_receipt
 from states import States
+from strings import Strings
 
 
 class Bot:
@@ -56,7 +57,7 @@ class Bot:
     @staticmethod
     def __format_number(tel_num: str) -> Optional[str]:
         tel_num = tel_num.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-        match = re.match(r"(\+7|8|7)(\d{10})", tel_num)
+        match = re.match(r"^(\+7|8|7)(\d{10})$", tel_num)
         if match is None:
             return None
         tel_num = f"+7{match[2]}"
@@ -65,7 +66,7 @@ class Bot:
     @staticmethod
     def __is_correct_code(code, number, context):
         try:
-            match = re.match(r"\d{4}", code)
+            match = re.match(r"^\d{4}$", code)
             if match is None:
                 return False
             context.user_data["id"], context.user_data["refresh"] = fns_api.send_login_code(number, code)
@@ -76,25 +77,15 @@ class Bot:
     @staticmethod
     def help_handler(update: Update, _: CallbackContext):
         update.effective_message.reply_text(
-            text="Бот для разделения чеков на компанию.\n" +
-                 "Алгоритм работы:\n" +
-                 "1) Введите номер телефона для авторизации в системе ФНС.\n" +
-                 "2) Введите код подтверждения из СМС.\n" +
-                 "3) Введите имена всех людей, среди которых делится чек, включая платившего, если такой есть.\n" +
-                 "4) Над появившейся клавиатурой написано название позиции. Отмечайте гостей, которым принадлежит эта позиция, нажимая на их имена.\n" +
-                 "5) Для перехода к следующей позиции используйте кнопку \"Next\", к предыдущей - \"Prev\", для отмены операции - \"Cancel\".\n" +
-                 "6) После распределения позиций по гостям нажмите кнопку \"Finish\"\n" +
-                 "Список команд:\n" +
-                 "/new_check - разделение нового чека.\n" +
-                 "/login - авторизация в системе.\n" +
-                 "/cancel - отмена текущей операции.\n" +
-                 "/help - помощь.\n"
+            text=Strings.HELP,
+            parse_mode='HTML'
         )
 
     @staticmethod
     def start_handler(update: Update, _: CallbackContext):
         update.effective_message.reply_text(
-            "Привет! Для полной информации о боте введите команду /help. Для продолжения работы введите номер телефона для авторизации на сервере ФНС: "
+            text=Strings.START,
+            parse_mode='HTML'
         )
         return States.WAITING_PHONE
 
@@ -102,14 +93,12 @@ class Bot:
     def new_check_handler(update: Update, context: CallbackContext):
         if "refresh" in context.user_data.keys():
             update.effective_message.reply_text(
-                text="Введите имена пользователей. Отправьте их по одному на строчке в одном сообщении." +
-                     " Обратите внимание, что недопустим ввод одного имени одного пользователя.\n\n" +
-                     "Пример:\n" +
-                     "Вася\nПетя\nВаня"
+                text=Strings.EnterNames,
+                parse_mode="HTML"
             )
             return States.WAITING_NAMES
         else:
-            update.effective_message.reply_text('Вы не авторизованы в системе. Для авторизации введите команду /login:')
+            update.effective_message.reply_text(Strings.UNAUTHORIZED_PLEASE_LOGIN, parse_mode="HTML")
             return ConversationHandler.END
 
     @staticmethod
@@ -123,15 +112,13 @@ class Bot:
             context.user_data['phone'] = mess
             try:
                 fns_api.send_login_sms(context.user_data['phone'])
-                update.effective_message.reply_text('Введите код подтверждения из СМС:')
+                update.effective_message.reply_text(Strings.EnterSMS, parse_mode="HTML")
             except InvalidPhoneException:
-                update.effective_message.reply_text(
-                    'Слишком много запросов, повторите попытку позже. Для повторной авторизации введите команду /login:'
-                )
+                update.effective_message.reply_text(Strings.InvalidPhone)
                 return ConversationHandler.END
             return States.WAITING_CODE
 
-        update.effective_message.reply_text("Неверный номер телефона, если хотите прекратить работу, введите /cancel")
+        update.effective_message.reply_text(Strings.InvalidPhoneTryAgain)
         return States.WAITING_PHONE
 
     @staticmethod
@@ -141,27 +128,26 @@ class Bot:
         current_is_correct_code = Bot.__is_correct_code(mess, context.user_data['phone'], context)
 
         if current_is_correct_code:
-            update.effective_message.reply_text('Введите команду /new_check для разделения чека:')
+            update.effective_message.reply_text(Strings.BeginInteractionQrCode)
             return ConversationHandler.END
         elif current_is_correct_code is None:
-            update.effective_message.reply_text('Возникли проблемы с номером телефона, введите его еще раз:')
+            update.effective_message.reply_text(Strings.InvalidPhoneTryAgain)
             return States.WAITING_PHONE
 
-        update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
+        update.effective_message.reply_text(Strings.InvalidCode)
         return States.WAITING_CODE
 
     @staticmethod
     def cancel_handler(update: Update, context: CallbackContext):
-        text = 'Для авторизации введите команду /login'
+        text = Strings.HowToAuthenticate
         if "refresh" in context.user_data.keys():
-            text = 'Для разделения нового чека введите команду /new_check'
-        update.effective_message.reply_text("Операция отменена.\n" + text)
+            text = Strings.BeginInteractionQrCode
+        update.effective_message.reply_text(f"{Strings.OperationCancelled}\n\n{text}")
         return ConversationHandler.END
 
     @staticmethod
     def inline_cancel_handler(update: Update, _: CallbackContext):
-        update.effective_message.edit_text('Операция отменена.\n'
-                                           'Для разделения нового чека введите команду /new_check')
+        update.effective_message.edit_text(f"{Strings.OperationCancelled}\n\n{Strings.BeginInteractionQrCode}")
         return ConversationHandler.END
 
     @staticmethod
@@ -194,15 +180,18 @@ class Bot:
                                                    context.user_data["users_for_position"][current_pos],
                                                    first=current_pos == 0)
         position_name = context.user_data["check"][current_pos].name
+        # TODO: fix price -> sum
+        # TODO: format string
         update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
-                                           ' руб.', reply_markup=keyboard)
+                                           ' ' + Strings.rubles, reply_markup=keyboard)
+
 
     @staticmethod
     def tickets_picks_next_handler(update: Update, context: CallbackContext):
         current_pos = context.user_data["current_pos"]
         current_users_for_position = context.user_data["users_for_position"][current_pos]
         if len(current_users_for_position) == 0:
-            update.callback_query.answer("Выберите пользователей", show_alert=True)
+            update.callback_query.answer(Strings.SelectPeople, show_alert=True)
             return
 
         context.user_data["current_pos"] += 1
@@ -212,15 +201,17 @@ class Bot:
                                                    current_users_for_position,
                                                    last=current_pos == len(context.user_data["check"]) - 1)
         position_name = context.user_data["check"][current_pos].name
+        # TODO: fix price -> sum
+        # TODO: format string
         update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
-                                           ' руб.', reply_markup=keyboard)
+                                           ' ' + Strings.rubles, reply_markup=keyboard)
 
     @staticmethod
     def tickets_picks_finish_handler(update: Update, context: CallbackContext):
         current_pos = context.user_data["current_pos"]
         current_users_for_position = context.user_data["users_for_position"][current_pos]
         if len(current_users_for_position) == 0:
-            update.callback_query.answer("Выберите пользователей", show_alert=True)
+            update.callback_query.answer(Strings.SelectPeople, show_alert=True)
             return
 
         answer = ''
@@ -229,20 +220,23 @@ class Bot:
             for j in range(len(context.user_data['check'])):
                 if name in context.user_data['users_for_position'][j]:
                     debt += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
-            answer += name + ' должен заплатить ' + ("%.2f" % debt) + ' руб.\n'
+            answer += f"{name} {Strings.shallPay} {'%.2f' % debt} {Strings.rubles}\n"
 
-        update.effective_message.reply_text(answer + '\nДля разделения нового чека введите команду /new_check')
+        update.effective_message.reply_text(f"{Strings.ResultsHeader}\n\n"
+                                            f"{answer}\n\n"
+                                            f"{Strings.RepeatInteractionQrCode}"
+                                            f"\n{Strings.AdvertisingFooter}")
 
     @staticmethod
     def guest_name_handler(update: Update, context: CallbackContext):
         mess = update.effective_message.text
         if len(mess.splitlines()) == 1:
             update.effective_message.reply_text(
-                text='Неверный формат ввода. Обратите внимание на пример и пришлите список имен пользователей снова'
+                text=Strings.IncorrectFormat
             )
             return States.WAITING_NAMES
         context.user_data["names"] = mess.splitlines()
-        update.effective_message.reply_text('Пришлите фотографию QR-кода с чека:')
+        update.effective_message.reply_text(Strings.EnterQR)
         return States.WAITING_TICKET
 
     @staticmethod
@@ -251,7 +245,7 @@ class Bot:
         file_info = update.message.photo[-1].get_file()
         url = file_info.file_path
         uniq_id = file_info.file_unique_id
-        wait_message = update.effective_message.reply_text("Пожалуйста, подождите...")
+        wait_message = update.effective_message.reply_text(Strings.PleaseWait)
         text, got = readerQR.main_qr_reader(url, uniq_id)
         if got:
             try:
@@ -262,7 +256,7 @@ class Bot:
                 keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                             context.user_data["users_for_position"][0],
                                                             first=True)
-                wait_message.edit_text(f"{check.items[0].name} - {check.items[0].price} руб.",
+                wait_message.edit_text(f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
                                        reply_markup=keyboard)
                 return States.TICKET_PICKS
             except InvalidTicketIdException:
@@ -277,22 +271,20 @@ class Bot:
                             keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                                         context.user_data["users_for_position"][0],
                                                                         first=True)
-                            update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} руб.",
+                            update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
                                                                 reply_markup=keyboard)
                         except:
                             update.effective_message.reply_text(
-                                'На сервере ФНС что-то пошло не так. Авторизуйтесь, пожалуйста, заново. ' +
-                                'Для этого введите команду /login'
+                                Strings.FNSError
                             )
                             return ConversationHandler.END
                     except InvalidSessionIdException:
                         update.effective_message.reply_text(
-                            'На сервере ФНС что-то пошло не так. Авторизуйтесь, пожалуйста, заново. ' +
-                            'Для этого введите команду /login'
+                            Strings.FNSError
                         )
                         return ConversationHandler.END
         else:
-            update.effective_message.reply_text("QR-код не читаем или его нет. Пришлите новую фотографию QR-кода")
+            update.effective_message.reply_text(Strings.CouldNotReadQR)
             return States.WAITING_TICKET
 
     @staticmethod
@@ -304,9 +296,9 @@ class Bot:
             else:
                 buttons.append([InlineKeyboardButton(f"❌ {name}", callback_data=f"{name}_YES")])
 
-        prev_button = InlineKeyboardButton("Prev", callback_data="PREV")
-        next_button = InlineKeyboardButton("Next", callback_data="NEXT")
-        finish_button = InlineKeyboardButton("Finish", callback_data="FINISH")
+        prev_button = InlineKeyboardButton(Strings.Prev, callback_data="PREV")
+        next_button = InlineKeyboardButton(Strings.Next, callback_data="NEXT")
+        finish_button = InlineKeyboardButton(Strings.Finish, callback_data="FINISH")
 
         if first:
             buttons.append([next_button])
@@ -315,7 +307,7 @@ class Bot:
         else:
             buttons.append([prev_button, next_button])
 
-        buttons.append([InlineKeyboardButton("Отмена", callback_data="CANCEL")])
+        buttons.append([InlineKeyboardButton(Strings.Cancel, callback_data="CANCEL")])
 
         return InlineKeyboardMarkup(buttons)
 
