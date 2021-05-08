@@ -46,6 +46,7 @@ class Bot:
                        CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL")],
         )
 
+        self.updater.dispatcher.add_handler(CommandHandler('help', self.help_handler))
         self.updater.dispatcher.add_handler(login_handler)
         self.updater.dispatcher.add_handler(ticket_handler)
 
@@ -83,19 +84,42 @@ class Bot:
             return False
 
     @staticmethod
+    def help_handler(update: Update, _: CallbackContext):
+        update.effective_message.reply_text(
+            text="Бот для разделения чеков на компанию.\n" +
+                 "Алгоритм работы:\n" +
+                 "1) Введите номер телефона для авторизации в системе ФНС.\n" +
+                 "2) Введите код подтверждения из СМС.\n" +
+                 "3) Введите имена всех людей, среди которых делится чек, включая платившего, если такой есть.\n" +
+                 "4) Над появившейся клавиатурой написано название позиции. Отмечайте гостей, которым принадлежит эта позиция, нажимая на их имена.\n" +
+                 "5) Для перехода к следующей позиции используйте кнопку \"Next\", к предыдущей - \"Prev\", для отмены операции - \"Cancel\".\n" +
+                 "6) После распределения позиций по гостям нажмите кнопку \"Finish\"\n" +
+                 "Список команд:\n" +
+                 "/new_check - разделение нового чека.\n" +
+                 "/login - авторизация в системе.\n" +
+                 "/cancel - отмена текущей операции.\n" +
+                 "/help - помощь.\n"
+        )
+
+    @staticmethod
     def start_handler(update: Update, _: CallbackContext):
-        update.effective_message.reply_text("Привет! Введите номер телефона: ")
+        update.effective_message.reply_text(
+            "Привет! Для полной информации о боте введите команду /help. Для продолжения работы введите номер телефона для авторизации на сервере ФНС: "
+        )
         return States.WAITING_PHONE
 
     @staticmethod
     def new_check_handler(update: Update, context: CallbackContext):
         if "refresh" in context.user_data.keys():
             update.effective_message.reply_text(
-                text="Введите имена пользователей(для каждого пользователя введите имя на новой строчке): "
+                text="Введите имена пользователей. Отправьте их по одному на строчке в одном сообщении." +
+                     " Обратите внимание, что недопустим ввод одного имени одного пользователя.\n\n" +
+                     "Пример:\n" +
+                     "Вася\nПетя\nВаня"
             )
             return States.WAITING_NAMES
         else:
-            update.effective_message.reply_text('Вы не авторизованы. Введите команду /login')
+            update.effective_message.reply_text('Вы не авторизованы в системе. Для авторизации введите команду /login:')
             return ConversationHandler.END
 
     @staticmethod
@@ -103,11 +127,17 @@ class Bot:
         mess = update.effective_message.text
 
         if Bot.__is_correct_number(mess):
-            update.effective_message.reply_text('Введите код из СМС:')
             if mess[0] == '7' or mess[0] == '8':
                 mess = '+7' + mess[1:]
             context.user_data['phone'] = mess
-            fns_api.send_login_sms(context.user_data['phone'])
+            try:
+                fns_api.send_login_sms(context.user_data['phone'])
+                update.effective_message.reply_text('Введите код подтверждения из СМС:')
+            except InvalidPhoneException:
+                update.effective_message.reply_text(
+                    'Слишком много запросов, повторите попытку позже. Для повторной авторизации введите команду /login:'
+                )
+                return ConversationHandler.END
             return States.WAITING_CODE
 
         update.effective_message.reply_text("Неверный номер телефона, если хотите прекратить работу, введите /cancel")
@@ -120,18 +150,21 @@ class Bot:
         current_is_correct_code = Bot.__is_correct_code(mess, context.user_data['phone'], context)
 
         if current_is_correct_code:
-            update.effective_message.reply_text('Введите команду /new_check для обработки чека:')
+            update.effective_message.reply_text('Введите команду /new_check для разделения чека:')
             return ConversationHandler.END
         elif current_is_correct_code is None:
-            update.effective_message.reply_text('Какие-то проблемы с телефоном, введите его еще раз:')
+            update.effective_message.reply_text('Возникли проблемы с номером телефона, введите его еще раз:')
             return States.WAITING_PHONE
 
         update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
         return States.WAITING_CODE
 
     @staticmethod
-    def cancel_handler(update: Update, _: CallbackContext):
-        update.effective_message.reply_text('Для разделения нового чека введите команду /new_check')
+    def cancel_handler(update: Update, context: CallbackContext):
+        text = 'Для авторизации введите команду /login'
+        if "refresh" in context.user_data.keys():
+            text = 'Для разделения нового чека введите команду /new_check'
+        update.effective_message.reply_text("Операция отменена.\n" + text)
         return ConversationHandler.END
 
     @staticmethod
@@ -175,10 +208,17 @@ class Bot:
 
     @staticmethod
     def tickets_picks_next_handler(update: Update, context: CallbackContext):
-        context.user_data["current_pos"] += 1
         current_pos = context.user_data["current_pos"]
+        current_users_for_position = context.user_data["users_for_position"][current_pos]
+        if len(current_users_for_position) == 0:
+            update.callback_query.answer("Выберите пользователей", show_alert=True)
+            return
+
+        context.user_data["current_pos"] += 1
+        current_pos += 1
+        current_users_for_position = context.user_data["users_for_position"][current_pos]
         keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
-                                                   context.user_data["users_for_position"][current_pos],
+                                                   current_users_for_position,
                                                    last=current_pos == len(context.user_data["check"]) - 1)
         position_name = context.user_data["check"][current_pos].name
         update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
@@ -186,6 +226,12 @@ class Bot:
 
     @staticmethod
     def tickets_picks_finish_handler(update: Update, context: CallbackContext):
+        current_pos = context.user_data["current_pos"]
+        current_users_for_position = context.user_data["users_for_position"][current_pos]
+        if len(current_users_for_position) == 0:
+            update.callback_query.answer("Выберите пользователей", show_alert=True)
+            return
+
         answer = ''
         for name in context.user_data['names']:
             debt = 0
@@ -194,11 +240,16 @@ class Bot:
                     debt += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
             answer += name + ' должен заплатить ' + ("%.2f" % debt) + ' руб.\n'
 
-        update.effective_message.edit_text(answer)
+        update.effective_message.reply_text(answer + '\nДля разделения нового чека введите команду /new_check')
 
     @staticmethod
     def guest_name_handler(update: Update, context: CallbackContext):
         mess = update.effective_message.text
+        if len(mess.splitlines()) == 1:
+            update.effective_message.reply_text(
+                text='Неверный формат ввода. Обратите внимание на пример и пришлите список имен пользователей снова'
+            )
+            return States.WAITING_NAMES
         context.user_data["names"] = mess.splitlines()
         update.effective_message.reply_text('Пришлите фотографию QR-кода с чека:')
         return States.WAITING_TICKET
@@ -238,13 +289,19 @@ class Bot:
                             update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} руб.",
                                                                 reply_markup=keyboard)
                         except:
-                            update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
+                            update.effective_message.reply_text(
+                                'На сервере ФНС что-то пошло не так. Авторизуйтесь, пожалуйста, заново. ' +
+                                'Для этого введите команду /login'
+                            )
                             return ConversationHandler.END
                     except InvalidSessionIdException:
-                        update.effective_message.reply_text('Что-то пошло не так. Введите команду /login')
+                        update.effective_message.reply_text(
+                            'На сервере ФНС что-то пошло не так. Авторизуйтесь, пожалуйста, заново. ' +
+                            'Для этого введите команду /login'
+                        )
                         return ConversationHandler.END
         else:
-            update.effective_message.reply_text("QR-код не читаем или его нет")
+            update.effective_message.reply_text("QR-код не читаем или его нет. Пришлите новую фотографию QR-кода")
             return States.WAITING_TICKET
 
     @staticmethod
