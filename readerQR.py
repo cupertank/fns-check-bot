@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 from pyzxing import BarCodeReader
 import urllib.request
-from typing import Optional
+from typing import Union
 
 
 def read_image(path):
@@ -12,7 +12,7 @@ def read_image(path):
         return bytearray(f.read())
 
 
-def read_qr_by_pyzxing(img: Optional[bytearray, str]):
+def read_qr_by_pyzxing(img: Union[bytearray, str]):
     reader = BarCodeReader()
     if img is bytearray:
         np_array = np.array(Image.open(io.BytesIO(img)))
