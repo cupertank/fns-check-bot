@@ -25,19 +25,21 @@ class Bot:
             self.dao = db.Dao(conn)
 
         login_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', self.start_handler), CommandHandler('login', self.start_handler)],
+            entry_points=[CommandHandler('start', self.start_handler, run_async=True),
+                          CommandHandler('login', self.start_handler, run_async=True)],
             states={
-                States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler)],
-                States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler)]
+                States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler, run_async=True)],
+                States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler, run_async=True)]
             },
-            fallbacks=[CommandHandler('cancel', self.cancel_handler)],
+            fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True)],
+            run_async=True
         )
 
         ticket_handler = ConversationHandler(
-            entry_points=[CommandHandler('new_check', self.new_check_handler)],
+            entry_points=[CommandHandler('new_check', self.new_check_handler, run_async=True)],
             states={
-                States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler)],
-                States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler)],
+                States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler, run_async=True)],
+                States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler, run_async=True)],
                 States.TICKET_PICKS: [
                     CallbackQueryHandler(self.tickets_picks_next_handler, pattern="^NEXT$"),
                     CallbackQueryHandler(self.tickets_picks_prev_handler, pattern="^PREV$"),
@@ -46,11 +48,11 @@ class Bot:
                     CallbackQueryHandler(self.ticket_picks_no_handler, pattern=".*_NO$")
                 ]
             },
-            fallbacks=[CommandHandler('cancel', self.cancel_handler),
+            fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
                        CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL")],
         )
 
-        self.updater.dispatcher.add_handler(CommandHandler('help', self.help_handler))
+        self.updater.dispatcher.add_handler(CommandHandler('help', self.help_handler, run_async=True))
         self.updater.dispatcher.add_handler(login_handler)
         self.updater.dispatcher.add_handler(ticket_handler)
 
