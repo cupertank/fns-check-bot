@@ -294,7 +294,8 @@ class Bot:
                 context.user_data["current_pos"] = 0
                 keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                            context.user_data["users_for_position"][0],
-                                                           first=True)
+                                                           first=True,
+                                                           last=len(check.items) == 1)
                 wait_message.edit_text(f"{check.items[0].name} - {check.items[0].sum} {Strings.rubles}",
                                        reply_markup=keyboard)
                 return States.TICKET_PICKS
@@ -341,12 +342,14 @@ class Bot:
         next_button = InlineKeyboardButton(Strings.Next, callback_data="NEXT")
         finish_button = InlineKeyboardButton(Strings.Finish, callback_data="FINISH")
 
-        if first:
-            buttons.append([next_button])
-        elif last:
-            buttons.append([prev_button, finish_button])
+        navigation_buttons = []
+        if not first:
+            navigation_buttons.append(prev_button)
+        if last:
+            navigation_buttons.append(finish_button)
         else:
-            buttons.append([prev_button, next_button])
+            navigation_buttons.append(next_button)
+        buttons.append(navigation_buttons)
 
         buttons.append([InlineKeyboardButton(Strings.Cancel, callback_data="CANCEL")])
 
