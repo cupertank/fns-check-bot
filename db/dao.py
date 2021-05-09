@@ -20,7 +20,7 @@ class Dao:
 
     def set_refresh_token(self, uid: int, refresh_token: str) -> None:
         if self.__isLocal:
-            if "uid" not in self.__localDict:
+            if uid not in self.__localDict:
                 self.__localDict[uid] = [None, None]
             self.__localDict[uid][0] = refresh_token
             return

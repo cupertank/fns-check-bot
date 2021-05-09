@@ -246,8 +246,8 @@ class Bot:
             sum = 0
             for j in range(len(context.user_data['check'])):
                 if name in context.user_data['users_for_position'][j]:
-                    sum += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
-                    debt.append([context.user_data['check'][j].name, context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])])
+                    sum += context.user_data['check'][j].sum / len(context.user_data['users_for_position'][j])
+                    debt.append([context.user_data['check'][j].name, context.user_data['check'][j].sum / len(context.user_data['users_for_position'][j])])
             answer.append([f"{name[:-6]} {Strings.shallPay} {'%.2f' % sum} {Strings.rubles}\n", debt])
 
         update.effective_message.delete()
@@ -295,7 +295,7 @@ class Bot:
                 keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                            context.user_data["users_for_position"][0],
                                                            first=True)
-                wait_message.edit_text(f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
+                wait_message.edit_text(f"{check.items[0].name} - {check.items[0].sum} {Strings.rubles}",
                                        reply_markup=keyboard)
                 return States.TICKET_PICKS
             except InvalidTicketIdException:
@@ -313,7 +313,7 @@ class Bot:
                                                                        context.user_data["users_for_position"][0],
                                                                        first=True)
                             wait_message.edit_text(
-                                f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
+                                f"{check.items[0].name} - {check.items[0].sum} {Strings.rubles}",
                                 reply_markup=keyboard)
                         except:
                             update.effective_message.reply_text(Strings.FNSLoginError)
