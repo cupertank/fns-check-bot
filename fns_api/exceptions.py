@@ -16,3 +16,7 @@ class InvalidTicketIdException(Exception):
 
 class InvalidSessionIdException(Exception):
     pass
+
+
+class FNSConnectionError(Exception):
+    pass

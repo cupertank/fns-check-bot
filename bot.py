@@ -73,6 +73,7 @@ class Bot:
             return True
         except InvalidSmsCodeException:
             return False
+        # FNSConnectionError passes
 
     @staticmethod
     def help_handler(update: Update, _: CallbackContext):
@@ -116,6 +117,9 @@ class Bot:
             except InvalidPhoneException:
                 update.effective_message.reply_text(Strings.InvalidPhone)
                 return ConversationHandler.END
+            except FNSConnectionError:
+                update.effective_message.reply_text(Strings.ConnectionToFNSLost)
+                return States.WAITING_PHONE
             return States.WAITING_CODE
 
         update.effective_message.reply_text(Strings.InvalidPhoneTryAgain)
@@ -125,7 +129,11 @@ class Bot:
     def code_handler(update: Update, context: CallbackContext):
         mess = update.effective_message.text
 
-        current_is_correct_code = Bot.__is_correct_code(mess, context.user_data['phone'], context)
+        try:
+            current_is_correct_code = Bot.__is_correct_code(mess, context.user_data['phone'], context)
+        except FNSConnectionError:
+            update.effective_message.reply_text(Strings.ConnectionToFNSLost)
+            return States.WAITING_CODE
 
         if current_is_correct_code:
             update.effective_message.reply_text(Strings.BeginInteractionQrCode)
@@ -185,7 +193,6 @@ class Bot:
         update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
                                            ' ' + Strings.rubles, reply_markup=keyboard)
 
-
     @staticmethod
     def tickets_picks_next_handler(update: Update, context: CallbackContext):
         current_pos = context.user_data["current_pos"]
@@ -222,10 +229,10 @@ class Bot:
                     debt += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
             answer += f"{name} {Strings.shallPay} {'%.2f' % debt} {Strings.rubles}\n"
 
-        update.effective_message.reply_text(f"{Strings.ResultsHeader}\n\n"
-                                            f"{answer}\n\n"
-                                            f"{Strings.RepeatInteractionQrCode}"
-                                            f"\n{Strings.AdvertisingFooter}")
+        update.effective_message.edit_text(f"{Strings.ResultsHeader}\n\n"
+                                           f"{answer}\n\n"
+                                           f"{Strings.RepeatInteractionQrCode}"
+                                           f"\n{Strings.AdvertisingFooter}")
 
     @staticmethod
     def guest_name_handler(update: Update, context: CallbackContext):
@@ -254,8 +261,8 @@ class Bot:
                 context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
                 context.user_data["current_pos"] = 0
                 keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
-                                                            context.user_data["users_for_position"][0],
-                                                            first=True)
+                                                           context.user_data["users_for_position"][0],
+                                                           first=True)
                 wait_message.edit_text(f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
                                        reply_markup=keyboard)
                 return States.TICKET_PICKS
@@ -269,20 +276,26 @@ class Bot:
                             context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
                             context.user_data["current_pos"] = 0
                             keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
-                                                                        context.user_data["users_for_position"][0],
-                                                                        first=True)
-                            update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
-                                                                reply_markup=keyboard)
+                                                                       context.user_data["users_for_position"][0],
+                                                                       first=True)
+                            update.effective_message.reply_text(
+                                f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
+                                reply_markup=keyboard)
                         except:
                             update.effective_message.reply_text(
-                                Strings.FNSError
+                                Strings.FNSLoginError
                             )
                             return ConversationHandler.END
-                    except InvalidSessionIdException:
+                    except (InvalidSessionIdException, FNSConnectionError):
                         update.effective_message.reply_text(
-                            Strings.FNSError
+                            Strings.FNSLoginError
                         )
                         return ConversationHandler.END
+            except FNSConnectionError:
+                update.effective_message.reply_text(
+                    Strings.FNSLoginError
+                )
+                return ConversationHandler.END
         else:
             update.effective_message.reply_text(Strings.CouldNotReadQR)
             return States.WAITING_TICKET
