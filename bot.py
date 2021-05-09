@@ -32,7 +32,8 @@ class Bot:
                 States.WAITING_PHONE: [MessageHandler(Filters.text & ~Filters.command, self.phone_handler, run_async=True)],
                 States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler, run_async=True)]
             },
-            fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True)],
+            fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
+                       MessageHandler(Filters.all, self.wrong_login_handler, run_async=True)],
             run_async=True
         )
 
@@ -50,7 +51,8 @@ class Bot:
                 ]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
-                       CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL")],
+                       CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL"),
+                       MessageHandler(Filters.all, self.wrong_ticket_handler, run_async=True)]
         )
 
         self.updater.dispatcher.add_handler(CommandHandler('help', self.help_handler, run_async=True))
@@ -81,7 +83,12 @@ class Bot:
         )
 
     @staticmethod
-    def start_handler(update: Update, _: CallbackContext):
+    def start_handler(update: Update, context: CallbackContext):
+        #TODO: Боже спаси базу данных
+        if "refresh" in context.user_data.keys():
+            update.effective_message.reply_text(
+                'Неверный ввод. Для отмены операции введите /cancel')
+            return ConversationHandler.END
         update.effective_message.reply_text(
             text=Strings.START,
             parse_mode='HTML'
@@ -100,6 +107,14 @@ class Bot:
         else:
             update.effective_message.reply_text(Strings.UNAUTHORIZED_PLEASE_LOGIN, parse_mode="HTML")
             return ConversationHandler.END
+
+    @staticmethod
+    def wrong_login_handler(update: Update, _: CallbackContext):
+        update.effective_message.reply_text('Неверный ввод. Для отмены операции введите /cancel')
+
+    @staticmethod
+    def wrong_ticket_handler(update: Update, _: CallbackContext):
+        update.effective_message.reply_text('Неверный ввод. Для отмены операции введите /cancel')
 
     @staticmethod
     def phone_handler(update: Update, context: CallbackContext):
@@ -160,11 +175,13 @@ class Bot:
 
     @staticmethod
     def inline_cancel_handler(update: Update, _: CallbackContext):
+        update.callback_query.answer()
         update.effective_message.edit_text(f"{Strings.OperationCancelled}\n\n{Strings.BeginInteractionQrCode}")
         return ConversationHandler.END
 
     @staticmethod
     def ticket_picks_yes_handler(update: Update, context: CallbackContext):
+        update.callback_query.answer()
         callback_name = update.callback_query.data[:-4]
         current_pos = context.user_data["current_pos"]
         context.user_data["users_for_position"][current_pos].append(callback_name)
@@ -176,6 +193,7 @@ class Bot:
 
     @staticmethod
     def ticket_picks_no_handler(update: Update, context: CallbackContext):
+        update.callback_query.answer()
         callback_name = update.callback_query.data[:-3]
         current_pos = context.user_data["current_pos"]
         context.user_data["users_for_position"][current_pos].remove(callback_name)
@@ -187,13 +205,14 @@ class Bot:
 
     @staticmethod
     def tickets_picks_prev_handler(update: Update, context: CallbackContext):
+        update.callback_query.answer()
         context.user_data["current_pos"] -= 1
         current_pos = context.user_data["current_pos"]
         keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                    context.user_data["users_for_position"][current_pos],
                                                    first=current_pos == 0)
         position_name = context.user_data["check"][current_pos].name
-        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
+        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].sum) +
                                            ' ' + Strings.rubles, reply_markup=keyboard)
 
     @staticmethod
@@ -204,6 +223,7 @@ class Bot:
             update.callback_query.answer(Strings.SelectPeople, show_alert=True)
             return
 
+        update.callback_query.answer()
         context.user_data["current_pos"] += 1
         current_pos += 1
         current_users_for_position = context.user_data["users_for_position"][current_pos]
@@ -211,7 +231,7 @@ class Bot:
                                                    current_users_for_position,
                                                    last=current_pos == len(context.user_data["check"]) - 1)
         position_name = context.user_data["check"][current_pos].name
-        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].price) +
+        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].sum) +
                                            ' ' + Strings.rubles, reply_markup=keyboard)
 
     @staticmethod
@@ -222,28 +242,42 @@ class Bot:
             update.callback_query.answer(Strings.SelectPeople, show_alert=True)
             return
 
-        answer = ''
+        update.callback_query.answer()
+        answer = []
         for name in context.user_data['names']:
-            debt = 0
+            debt = []
+            sum = 0
             for j in range(len(context.user_data['check'])):
                 if name in context.user_data['users_for_position'][j]:
-                    debt += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
-            answer += f"{name} {Strings.shallPay} {'%.2f' % debt} {Strings.rubles}\n"
+                    sum += context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])
+                    debt.append([context.user_data['check'][j].name, context.user_data['check'][j].price / len(context.user_data['users_for_position'][j])])
+            answer.append([f"{name[:-6]} {Strings.shallPay} {'%.2f' % sum} {Strings.rubles}\n", debt])
 
-        update.effective_message.edit_text(f"{Strings.ResultsHeader}\n\n"
-                                           f"{answer}\n\n"
-                                           f"{Strings.RepeatInteractionQrCode}"
+        update.effective_message.delete()
+        update.effective_message.reply_text(f"{Strings.ResultsHeader}\n\n")
+        for result in answer:
+            pay_list = ''
+            if len(result[1]) == 0:
+                continue
+            for position in result[1]:
+                pay_list += f"{position[0]} - {'%.2f' % position[1]} {Strings.rubles}\n"
+            update.effective_message.reply_text(f"{result[0]}\n\n"
+                                               f"{Strings.PayingFor}\n"
+                                               f"{pay_list}")
+
+        update.effective_message.reply_text(f"{Strings.RepeatInteractionQrCode}"
                                            f"\n{Strings.AdvertisingFooter}")
+        return ConversationHandler.END
 
     @staticmethod
     def guest_name_handler(update: Update, context: CallbackContext):
         mess = update.effective_message.text
-        if len(mess.splitlines()) == 1:
+        if len(mess.splitlines()) == 1 or len(mess.splitlines()) > 10:
             update.effective_message.reply_text(
                 text=Strings.IncorrectFormat
             )
             return States.WAITING_NAMES
-        context.user_data["names"] = mess.splitlines()
+        context.user_data["names"] = [name + str(100000 + i) for i, name in enumerate(mess.splitlines())]
         update.effective_message.reply_text(Strings.EnterQR)
         return States.WAITING_TICKET
 
@@ -308,9 +342,9 @@ class Bot:
         buttons = []
         for name in names:
             if name in users_for_position:
-                buttons.append([InlineKeyboardButton(f"✅ {name}", callback_data=f"{name}_NO")])
+                buttons.append([InlineKeyboardButton(f"✅ {name[:-6]}", callback_data=f"{name}_NO")])
             else:
-                buttons.append([InlineKeyboardButton(f"❌ {name}", callback_data=f"{name}_YES")])
+                buttons.append([InlineKeyboardButton(f"❌ {name[:-6]}", callback_data=f"{name}_YES")])
 
         prev_button = InlineKeyboardButton(Strings.Prev, callback_data="PREV")
         next_button = InlineKeyboardButton(Strings.Next, callback_data="NEXT")

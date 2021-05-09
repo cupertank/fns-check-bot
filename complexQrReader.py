@@ -95,7 +95,7 @@ def read_qr_complex_pyzxing(pil_image: Union[Image.Image, str]) -> (str, bool):
             reader = pyzxing.BarCodeReader()
             output = reader.decode_array(np.array(img))
             # if found
-            if 'parsed' in output[0]:
+            if len(output) and 'parsed' in output[0]:
                 quadrant = output[0]['parsed'].decode('utf-8')
                 return quadrant, True
     # nothing found
