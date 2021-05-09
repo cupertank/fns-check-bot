@@ -32,7 +32,7 @@ class Bot:
                 States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler, run_async=True)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
-                       MessageHandler(Filters.all, self.wrong_handler, run_async=True)],
+                       MessageHandler(Filters.update.message, self.wrong_handler, run_async=True)],
             run_async=True
         )
 
@@ -51,12 +51,13 @@ class Bot:
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
                        CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL"),
-                       MessageHandler(Filters.all, self.wrong_handler, run_async=True)]
+                       MessageHandler(Filters.update.message, self.wrong_handler, run_async=True)]
         )
 
         self.updater.dispatcher.add_handler(CommandHandler('help', self.help_handler, run_async=True))
         self.updater.dispatcher.add_handler(login_handler)
         self.updater.dispatcher.add_handler(ticket_handler)
+        self.updater.dispatcher.add_handler(MessageHandler(Filters.update.message, self.help_handler, run_async=True))
 
     @staticmethod
     def __format_number(tel_num: str) -> Optional[str]:
@@ -85,7 +86,7 @@ class Bot:
         uid = update.effective_user.id
         refresh_id = self.dao.get_refresh_token(uid)
         if refresh_id is not None:
-            update.effective_message.reply_text(Strings.HELP)
+            update.effective_message.reply_text(Strings.HELP, parse_mode="HTML")
             return ConversationHandler.END
         update.effective_message.reply_text(
             text=Strings.START,
@@ -311,23 +312,17 @@ class Bot:
                             keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
                                                                        context.user_data["users_for_position"][0],
                                                                        first=True)
-                            update.effective_message.reply_text(
+                            wait_message.edit_text(
                                 f"{check.items[0].name} - {check.items[0].price} {Strings.rubles}",
                                 reply_markup=keyboard)
                         except:
-                            update.effective_message.reply_text(
-                                Strings.FNSLoginError
-                            )
+                            update.effective_message.reply_text(Strings.FNSLoginError)
                             return ConversationHandler.END
                     except (InvalidSessionIdException, FNSConnectionError):
-                        update.effective_message.reply_text(
-                            Strings.FNSLoginError
-                        )
+                        update.effective_message.reply_text(Strings.FNSLoginError)
                         return ConversationHandler.END
             except FNSConnectionError:
-                update.effective_message.reply_text(
-                    Strings.FNSLoginError
-                )
+                update.effective_message.reply_text(Strings.FNSLoginError)
                 return ConversationHandler.END
         else:
             update.effective_message.reply_text(Strings.CouldNotReadQR)
