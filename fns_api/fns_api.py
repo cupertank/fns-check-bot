@@ -29,7 +29,10 @@ def send_login_sms(number: str):
         'client_secret': __CLIENT_SECRET,
         'phone': number
     }
-    resp = requests.post(url, headers=__HEADERS, json=payload)
+    try:
+        resp = requests.post(url, headers=__HEADERS, json=payload)
+    except:
+        raise FNSConnectionError()
     if resp.status_code != 204:
         raise InvalidPhoneException()
 
@@ -41,7 +44,10 @@ def send_login_code(number: str, code: str):
         'phone': number,
         'code': code
     }
-    resp = requests.post(url, headers=__HEADERS, json=payload)
+    try:
+        resp = requests.post(url, headers=__HEADERS, json=payload)
+    except:
+        raise FNSConnectionError()
     if resp.status_code != 200:
         raise InvalidSmsCodeException()
     resp_json = resp.json()
@@ -53,7 +59,10 @@ def __get_ticket_id(qr: str, session_id: str) -> str:
     headers = __HEADERS.copy()
     headers["sessionId"] = session_id
     payload = {'qr': qr}
-    resp = requests.post(url, headers=headers, json=payload)
+    try:
+        resp = requests.post(url, headers=headers, json=payload)
+    except:
+        raise FNSConnectionError()
     if resp.status_code != 200:
         raise InvalidTicketIdException()
     resp_json = resp.json()
@@ -65,7 +74,10 @@ def __get_ticket(qr: str, session_id: str) -> dict:
     headers["sessionId"] = session_id
     ticket_id = __get_ticket_id(qr, session_id)
     url = f'https://{__HOST}/v2/tickets/{ticket_id}'
-    resp = requests.get(url, headers=headers)
+    try:
+        resp = requests.get(url, headers=headers)
+    except:
+        raise FNSConnectionError()
     if resp.status_code != 200:
         raise InvalidTicketIdException()
     ticket_dict = resp.json()
@@ -81,7 +93,7 @@ def get_receipt(qr: str, session_id: str) -> Receipt:
         ticket: Receipt = Receipt.from_dict(receipt_dict)
         return ticket
     except KeyError:  # TODO check if nothing else can be thrown
-        raise InvalidTicketIdException
+        raise InvalidTicketIdException()
 
 
 def refresh_session(refresh_token: str) -> str:
@@ -91,7 +103,10 @@ def refresh_session(refresh_token: str) -> str:
         "client_secret": __CLIENT_SECRET,
         "refresh_token": refresh_token
     }
-    resp = requests.post(url, headers=headers, json=payload)
+    try:
+        resp = requests.post(url, headers=headers, json=payload)
+    except:
+        raise FNSConnectionError()
     if resp.status_code != 200:
         raise InvalidSessionIdException()
     resp_json = resp.json()
