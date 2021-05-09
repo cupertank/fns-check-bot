@@ -33,8 +33,12 @@ def send_login_sms(number: str):
         resp = requests.post(url, headers=__HEADERS, json=payload)
     except:
         raise FNSConnectionError()
+    if resp.status_code == 429:
+        raise TooManyRequests()
+
     if resp.status_code != 204:
         raise InvalidPhoneException()
+
 
 
 def send_login_code(number: str, code: str):

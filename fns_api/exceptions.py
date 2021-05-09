@@ -20,3 +20,6 @@ class InvalidSessionIdException(Exception):
 
 class FNSConnectionError(Exception):
     pass
+
+class TooManyRequests(Exception):
+    pass

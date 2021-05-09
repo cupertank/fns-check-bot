@@ -8,7 +8,6 @@ import psycopg2
 import db
 import fns_api
 import readerQR
-from db.dao import Dao
 from fns_api.exceptions import *
 from fns_api.fns_api import get_receipt
 from states import States
@@ -33,7 +32,7 @@ class Bot:
                 States.WAITING_CODE: [MessageHandler(Filters.text & ~Filters.command, self.code_handler, run_async=True)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
-                       MessageHandler(Filters.all, self.wrong_login_handler, run_async=True)],
+                       MessageHandler(Filters.all, self.wrong_handler, run_async=True)],
             run_async=True
         )
 
@@ -52,7 +51,7 @@ class Bot:
             },
             fallbacks=[CommandHandler('cancel', self.cancel_handler, run_async=True),
                        CallbackQueryHandler(self.inline_cancel_handler, pattern="CANCEL"),
-                       MessageHandler(Filters.all, self.wrong_ticket_handler, run_async=True)]
+                       MessageHandler(Filters.all, self.wrong_handler, run_async=True)]
         )
 
         self.updater.dispatcher.add_handler(CommandHandler('help', self.help_handler, run_async=True))
@@ -82,10 +81,10 @@ class Bot:
             parse_mode='HTML'
         )
 
-    @staticmethod
-    def start_handler(update: Update, context: CallbackContext):
-        #TODO: Боже спаси базу данных
-        if "refresh" in context.user_data.keys():
+    def start_handler(self, update: Update, _: CallbackContext):
+        uid = update.effective_user.id
+        refresh_id = self.dao.get_refresh_token(uid)
+        if refresh_id is not None:
             update.effective_message.reply_text(
                 'Неверный ввод. Для отмены операции введите /cancel')
             return ConversationHandler.END
@@ -95,7 +94,7 @@ class Bot:
         )
         return States.WAITING_PHONE
 
-    def new_check_handler(self, update: Update, context: CallbackContext):
+    def new_check_handler(self, update: Update, _: CallbackContext):
         uid = update.effective_user.id
         refresh_id = self.dao.get_refresh_token(uid)
         if refresh_id is not None :
@@ -109,11 +108,7 @@ class Bot:
             return ConversationHandler.END
 
     @staticmethod
-    def wrong_login_handler(update: Update, _: CallbackContext):
-        update.effective_message.reply_text('Неверный ввод. Для отмены операции введите /cancel')
-
-    @staticmethod
-    def wrong_ticket_handler(update: Update, _: CallbackContext):
+    def wrong_handler(update: Update, _: CallbackContext):
         update.effective_message.reply_text('Неверный ввод. Для отмены операции введите /cancel')
 
     @staticmethod
@@ -131,9 +126,12 @@ class Bot:
             except InvalidPhoneException:
                 update.effective_message.reply_text(Strings.InvalidPhone)
                 return ConversationHandler.END
+            except TooManyRequests:
+                update.effective_message.reply_text(Strings.TooManyRequests, parse_mode="HTML")
+                return ConversationHandler.END
             except FNSConnectionError:
                 update.effective_message.reply_text(Strings.ConnectionToFNSLost)
-                return States.WAITING_PHONE
+                return States.END
             return States.WAITING_CODE
 
         update.effective_message.reply_text(Strings.InvalidPhoneTryAgain)
@@ -142,24 +140,19 @@ class Bot:
     def code_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
 
-        current_is_correct_code = Bot.__is_correct_code(mess)
+        is_correct = Bot.__is_correct_code(mess)
 
-        if current_is_correct_code:
+        if is_correct:
             try:
                 session_id, refresh_id = fns_api.send_login_code(context.user_data['phone'], mess)
                 uid = update.effective_user.id
                 self.dao.set_session_id(uid, session_id)
                 self.dao.set_refresh_token(uid, refresh_id)
-                # context.user_data['refresh'] = refresh_id
-                # context.user_data['id'] = session_id
             except:
                 update.effective_message.reply_text('Возникли проблемы с кодом, введите его еще раз:')
                 return States.WAITING_CODE
             update.effective_message.reply_text(Strings.BeginInteractionQrCode)
             return ConversationHandler.END
-        elif current_is_correct_code is None:
-            update.effective_message.reply_text(Strings.InvalidPhoneTryAgain)
-            return States.WAITING_PHONE
 
         update.effective_message.reply_text(Strings.InvalidCode)
         return States.WAITING_CODE
@@ -212,8 +205,10 @@ class Bot:
                                                    context.user_data["users_for_position"][current_pos],
                                                    first=current_pos == 0)
         position_name = context.user_data["check"][current_pos].name
-        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].sum) +
-                                           ' ' + Strings.rubles, reply_markup=keyboard)
+        update.effective_message.edit_text(
+            f"{position_name} - {context.user_data['check'][current_pos].sum} {Strings.rubles}",
+            reply_markup=keyboard
+        )
 
     @staticmethod
     def tickets_picks_next_handler(update: Update, context: CallbackContext):
@@ -231,8 +226,10 @@ class Bot:
                                                    current_users_for_position,
                                                    last=current_pos == len(context.user_data["check"]) - 1)
         position_name = context.user_data["check"][current_pos].name
-        update.effective_message.edit_text(position_name + ' - ' + str(context.user_data["check"][current_pos].sum) +
-                                           ' ' + Strings.rubles, reply_markup=keyboard)
+        update.effective_message.edit_text(
+            f"{position_name} - {context.user_data['check'][current_pos].sum} {Strings.rubles}",
+            reply_markup=keyboard
+        )
 
     @staticmethod
     def tickets_picks_finish_handler(update: Update, context: CallbackContext):
@@ -265,8 +262,8 @@ class Bot:
                                                f"{Strings.PayingFor}\n"
                                                f"{pay_list}")
 
-        update.effective_message.reply_text(f"{Strings.RepeatInteractionQrCode}"
-                                           f"\n{Strings.AdvertisingFooter}")
+        update.effective_message.reply_text(f"{Strings.RepeatInteractionQrCode}\n"
+                                            f"{Strings.AdvertisingFooter}")
         return ConversationHandler.END
 
     @staticmethod
