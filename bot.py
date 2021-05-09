@@ -37,7 +37,7 @@ class Bot:
         )
 
         ticket_handler = ConversationHandler(
-            entry_points=[CommandHandler('new_check', self.new_check_handler, run_async=True)],
+            entry_points=[CommandHandler('new_receipt', self.new_check_handler, run_async=True)],
             states={
                 States.WAITING_NAMES: [MessageHandler(Filters.text & ~Filters.command, self.guest_name_handler, run_async=True)],
                 States.WAITING_TICKET: [MessageHandler(Filters.photo, self.picture_handler, run_async=True)],
@@ -86,7 +86,7 @@ class Bot:
         uid = update.effective_user.id
         refresh_id = self.dao.get_refresh_token(uid)
         if refresh_id is not None:
-            update.effective_message.reply_text(Strings.HELP, parse_mode="HTML")
+            update.effective_message.reply_text(Strings.AlreadyLogin, parse_mode="HTML")
             return ConversationHandler.END
         update.effective_message.reply_text(
             text=Strings.START,
