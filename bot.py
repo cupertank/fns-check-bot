@@ -1,3 +1,6 @@
+import re
+from typing import Optional
+
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, \
     CallbackQueryHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -52,32 +55,20 @@ class Bot:
         self.updater.dispatcher.add_handler(ticket_handler)
 
     @staticmethod
-    def __is_correct_number(tel_num):
-        if tel_num[0] == '+':
-            if len(tel_num) != 12:
-                return False
-            tel_num = tel_num[1:]
-        else:
-            if len(tel_num) != 11:
-                return False
-        if tel_num[0] != '7' and tel_num[0] != '8':
-            return False
-        if tel_num[1] != '9':
-            return False
-
-        for c in tel_num:
-            if not c.isdigit():
-                return False
-
-        return True
+    def __format_number(tel_num: str) -> Optional[str]:
+        tel_num = tel_num.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        match = re.match(r"(\+7|8|7)(\d{10})", tel_num)
+        if match is None:
+            return None
+        tel_num = f"+7{match[2]}"
+        return tel_num
 
     @staticmethod
     def __is_correct_code(code, number, context):
-        if len(code) != 4:
+        match = re.match(r"\d{4}", code)
+        if match is None:
             return False
-        for c in code:
-            if not c.isdigit():
-                return False
+        context.user_data["id"], context.user_data["refresh"] = fns_api.send_login_code(number, code)
         return True
 
     @staticmethod
@@ -123,9 +114,11 @@ class Bot:
     @staticmethod
     def phone_handler(update: Update, context: CallbackContext):
         mess = update.effective_message.text
-        if Bot.__is_correct_number(mess):
-            if mess[0] == '7' or mess[0] == '8':
-                mess = '+7' + mess[1:]
+
+        # format and check correctness
+        mess = Bot.__format_number(mess)
+
+        if mess is not None:
             context.user_data['phone'] = mess
             try:
                 fns_api.send_login_sms(context.user_data['phone'])
@@ -286,7 +279,6 @@ class Bot:
                         sess_id = fns_api.refresh_session(refresh)
                         self.dao.set_session_id(uid, sess_id)
                         try:
-                            # check = get_receipt(text, context.user_data['id'])
                             check = get_receipt(text, self.dao.get_session_id(uid))
                             context.user_data["check"] = check.items
                             context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
