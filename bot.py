@@ -8,6 +8,7 @@ import psycopg2
 import db
 import fns_api
 import readerQR
+from db.dao import Dao
 from fns_api.exceptions import *
 from fns_api.fns_api import get_receipt
 from states import States
@@ -64,14 +65,11 @@ class Bot:
 
     @staticmethod
     def __is_correct_code(code, number, context):
-        try:
-            match = re.match(r"\d{4}", code)
-            if match is None:
-                return False
-            context.user_data["id"], context.user_data["refresh"] = fns_api.send_login_code(number, code)
-            return True
-        except InvalidSmsCodeException:
+        match = re.match(r"\d{4}", code)
+        if match is None:
             return False
+        context.user_data["id"], context.user_data["refresh"] = fns_api.send_login_code(number, code)
+        return True
 
     @staticmethod
     def help_handler(update: Update, _: CallbackContext):
@@ -98,9 +96,10 @@ class Bot:
         )
         return States.WAITING_PHONE
 
-    @staticmethod
-    def new_check_handler(update: Update, context: CallbackContext):
-        if "refresh" in context.user_data.keys():
+    def new_check_handler(self, update: Update, context: CallbackContext):
+        uid = update.effective_user.id
+        refresh_id = self.dao.get_refresh_token(uid)
+        if refresh_id is not None :
             update.effective_message.reply_text(
                 text="Введите имена пользователей. Отправьте их по одному на строчке в одном сообщении." +
                      " Обратите внимание, что недопустим ввод одного имени одного пользователя.\n\n" +
@@ -134,13 +133,20 @@ class Bot:
         update.effective_message.reply_text("Неверный номер телефона, если хотите прекратить работу, введите /cancel")
         return States.WAITING_PHONE
 
-    @staticmethod
-    def code_handler(update: Update, context: CallbackContext):
+    def code_handler(self, update: Update, context: CallbackContext):
         mess = update.effective_message.text
-
         current_is_correct_code = Bot.__is_correct_code(mess, context.user_data['phone'], context)
-
         if current_is_correct_code:
+            try:
+                session_id, refresh_id = fns_api.send_login_code(context.user_data['phone'], mess)
+                uid = update.effective_user.id
+                self.dao.set_session_id(uid, session_id)
+                self.dao.set_refresh_token(uid, refresh_id)
+                # context.user_data['refresh'] = refresh_id
+                # context.user_data['id'] = session_id
+            except:
+                update.effective_message.reply_text('Возникли проблемы с кодом, введите его еще раз:')
+                return States.WAITING_CODE
             update.effective_message.reply_text('Введите команду /new_check для разделения чека:')
             return ConversationHandler.END
         elif current_is_correct_code is None:
@@ -150,10 +156,11 @@ class Bot:
         update.effective_message.reply_text("Неверный код, если хотите прекратить работу, введите /cancel")
         return States.WAITING_CODE
 
-    @staticmethod
-    def cancel_handler(update: Update, context: CallbackContext):
+    def cancel_handler(self, update: Update, context: CallbackContext):
         text = 'Для авторизации введите команду /login'
-        if "refresh" in context.user_data.keys():
+        uid = update.effective_user.id
+        refresh_id = self.dao.get_refresh_token(uid)
+        if refresh_id is not None:
             text = 'Для разделения нового чека введите команду /new_check'
         update.effective_message.reply_text("Операция отменена.\n" + text)
         return ConversationHandler.END
@@ -245,9 +252,9 @@ class Bot:
         update.effective_message.reply_text('Пришлите фотографию QR-кода с чека:')
         return States.WAITING_TICKET
 
-    @staticmethod
-    def picture_handler(update: Update, context: CallbackContext):
-        sess_id = context.user_data['id']
+    def picture_handler(self, update: Update, context: CallbackContext):
+        uid = update.effective_user.id
+        sess_id = self.dao.get_session_id(uid)
         file_info = update.message.photo[-1].get_file()
         url = file_info.file_path
         uniq_id = file_info.file_unique_id
@@ -260,23 +267,25 @@ class Bot:
                 context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
                 context.user_data["current_pos"] = 0
                 keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
-                                                            context.user_data["users_for_position"][0],
-                                                            first=True)
+                                                           context.user_data["users_for_position"][0],
+                                                           first=True)
                 wait_message.edit_text(f"{check.items[0].name} - {check.items[0].price} руб.",
                                        reply_markup=keyboard)
                 return States.TICKET_PICKS
             except InvalidTicketIdException:
-                if "refresh" in context.user_data.keys():
+                refresh = self.dao.get_refresh_token(uid)
+                if refresh is not None:
                     try:
-                        context.user_data["id"] = fns_api.refresh_session(context.user_data["refresh"])
+                        sess_id = fns_api.refresh_session(refresh)
+                        self.dao.set_session_id(uid, sess_id)
                         try:
-                            check = get_receipt(text, context.user_data['id'])
+                            check = get_receipt(text, self.dao.get_session_id(uid))
                             context.user_data["check"] = check.items
                             context.user_data["users_for_position"] = [[] for _ in range(len(check.items))]
                             context.user_data["current_pos"] = 0
                             keyboard = Bot.__make_keyboard_by_position(context.user_data["names"],
-                                                                        context.user_data["users_for_position"][0],
-                                                                        first=True)
+                                                                       context.user_data["users_for_position"][0],
+                                                                       first=True)
                             update.effective_message.reply_text(f"{check.items[0].name} - {check.items[0].price} руб.",
                                                                 reply_markup=keyboard)
                         except:
