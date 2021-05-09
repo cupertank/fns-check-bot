@@ -152,8 +152,8 @@ class Bot:
                 # context.user_data['refresh'] = refresh_id
                 # context.user_data['id'] = session_id
             except:
-                update.effective_message.reply_text('Возникли проблемы с номером телефона, введите его еще раз:')
-                return States.WAITING_PHONE
+                update.effective_message.reply_text('Возникли проблемы с кодом, введите его еще раз:')
+                return States.WAITING_CODE
             update.effective_message.reply_text('Введите команду /new_check для разделения чека:')
             return ConversationHandler.END
         elif current_is_correct_code is None:
