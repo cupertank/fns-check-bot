@@ -85,8 +85,7 @@ class Bot:
         uid = update.effective_user.id
         refresh_id = self.dao.get_refresh_token(uid)
         if refresh_id is not None:
-            update.effective_message.reply_text(
-                'Неверный ввод. Для отмены операции введите /cancel')
+            update.effective_message.reply_text(Strings.HELP)
             return ConversationHandler.END
         update.effective_message.reply_text(
             text=Strings.START,
@@ -97,7 +96,7 @@ class Bot:
     def new_check_handler(self, update: Update, _: CallbackContext):
         uid = update.effective_user.id
         refresh_id = self.dao.get_refresh_token(uid)
-        if refresh_id is not None :
+        if refresh_id is not None:
             update.effective_message.reply_text(
                 text=Strings.EnterNames,
                 parse_mode="HTML"
@@ -109,7 +108,7 @@ class Bot:
 
     @staticmethod
     def wrong_handler(update: Update, _: CallbackContext):
-        update.effective_message.reply_text('Неверный ввод. Для отмены операции введите /cancel')
+        update.effective_message.reply_text(Strings.Wrong)
 
     @staticmethod
     def phone_handler(update: Update, context: CallbackContext):
