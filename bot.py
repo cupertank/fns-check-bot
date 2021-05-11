@@ -82,12 +82,14 @@ class Bot:
             parse_mode='HTML'
         )
 
-    def start_handler(self, update: Update, _: CallbackContext):
-        uid = update.effective_user.id
-        refresh_id = self.dao.get_refresh_token(uid)
-        if refresh_id is not None:
-            update.effective_message.reply_text(Strings.AlreadyLogin, parse_mode="HTML")
-            return ConversationHandler.END
+    @staticmethod
+    def start_handler(update: Update, _: CallbackContext):
+        # TODO: check authenticated users
+        # uid = update.effective_user.id
+        # refresh_id = self.dao.get_refresh_token(uid)
+        # if refresh_id is not None:
+        #     update.effective_message.reply_text(Strings.AlreadyLogin, parse_mode="HTML")
+        #     return ConversationHandler.END
         update.effective_message.reply_text(
             text=Strings.START,
             parse_mode='HTML'
