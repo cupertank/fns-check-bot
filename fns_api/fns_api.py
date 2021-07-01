@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import requests
 
 from .exceptions import *
@@ -100,7 +102,13 @@ def get_receipt(qr: str, session_id: str) -> Receipt:
         raise InvalidTicketIdException()
 
 
-def refresh_session(refresh_token: str) -> str:
+def refresh_session(refresh_token: str) -> Tuple[str, str]:
+    """
+    Updates sessionId and refresh token
+
+    :param refresh_token: previous refresh token
+    :return: new sessionId and refresh token as a tuple
+    """
     url = f'https://{__HOST}/v2/mobile/users/refresh'
     headers = __HEADERS.copy()
     payload = {
@@ -114,4 +122,4 @@ def refresh_session(refresh_token: str) -> str:
     if resp.status_code != 200:
         raise InvalidSessionIdException()
     resp_json = resp.json()
-    return resp_json["sessionId"]
+    return resp_json["sessionId"], resp_json["refresh_token"]

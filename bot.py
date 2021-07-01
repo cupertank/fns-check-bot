@@ -305,8 +305,12 @@ class Bot:
                 refresh = self.dao.get_refresh_token(uid)
                 if refresh is not None:
                     try:
-                        sess_id = fns_api.refresh_session(refresh)
+                        # try to update sessionId and refresh token
+                        sess_id, new_refresh_token = fns_api.refresh_session(refresh)
+                        # save new sessionId and refresh token
                         self.dao.set_session_id(uid, sess_id)
+                        self.dao.set_refresh_token(uid, new_refresh_token)
+                        
                         try:
                             check = get_receipt(text, self.dao.get_session_id(uid))
                             context.user_data["check"] = check.items
